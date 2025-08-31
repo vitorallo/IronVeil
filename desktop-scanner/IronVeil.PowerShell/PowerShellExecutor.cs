@@ -45,17 +45,65 @@ public class PowerShellExecutor : IPowerShellExecutor, IDisposable
     {
         try
         {
-            // Create a simple runspace pool without complex initialization
-            // This avoids issues with missing snap-ins on development machines
-            _runspacePool = RunspaceFactory.CreateRunspacePool(1, _maxConcurrentRules);
-            _runspacePool.Open();
-            
-            _logger?.LogInformation("PowerShell runspace pool initialized with {MaxConcurrency} concurrent runspaces", _maxConcurrentRules);
+            // Try to create runspace pool with minimal session state to avoid snap-in issues
+            if (TryInitializeMinimalRunspacePool())
+            {
+                _logger?.LogInformation("PowerShell runspace pool initialized with minimal session state ({MaxConcurrency} concurrent runspaces)", _maxConcurrentRules);
+                return;
+            }
+
+            // Fallback to default runspace pool creation
+            if (TryInitializeDefaultRunspacePool())
+            {
+                _logger?.LogInformation("PowerShell runspace pool initialized with default session state ({MaxConcurrency} concurrent runspaces)", _maxConcurrentRules);
+                return;
+            }
+
+            throw new InvalidOperationException("Failed to initialize PowerShell runspace pool with any method");
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to initialize PowerShell runspace pool");
             throw;
+        }
+    }
+
+    private bool TryInitializeMinimalRunspacePool()
+    {
+        try
+        {
+            // Create minimal session state to avoid problematic snap-ins
+            var initialSessionState = InitialSessionState.CreateDefault2();
+            
+            // Use the minimal session state as-is to avoid snap-in issues
+            // CreateDefault2() creates a more restricted environment than CreateDefault()
+            _runspacePool = RunspaceFactory.CreateRunspacePool(1, _maxConcurrentRules, initialSessionState, null);
+            _runspacePool.Open();
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "Failed to initialize minimal runspace pool");
+            return false;
+        }
+    }
+
+    private bool TryInitializeDefaultRunspacePool()
+    {
+        try
+        {
+            // Create a simple runspace pool without complex initialization
+            // This avoids issues with missing snap-ins on development machines
+            _runspacePool = RunspaceFactory.CreateRunspacePool(1, _maxConcurrentRules);
+            _runspacePool.Open();
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "Failed to initialize default runspace pool");
+            return false;
         }
     }
 

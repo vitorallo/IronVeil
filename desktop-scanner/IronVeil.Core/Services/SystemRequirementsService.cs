@@ -1,6 +1,7 @@
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 using System.Management.Automation;
+using System.Management.Automation.Runspaces;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 
@@ -68,6 +69,58 @@ public class SystemRequirementsService : ISystemRequirementsService
 
     private bool CheckPowerShellAvailable()
     {
+        // Method 1: Try System.Management.Automation with minimal session state
+        if (TryPowerShellSdkMinimal())
+        {
+            _logger?.LogDebug("PowerShell detected via System.Management.Automation (minimal session state)");
+            return true;
+        }
+
+        // Method 2: Try System.Management.Automation with default session state (legacy)
+        if (TryPowerShellSdkDefault())
+        {
+            _logger?.LogDebug("PowerShell detected via System.Management.Automation (default session state)");
+            return true;
+        }
+
+        // Method 3: Fallback to executable detection
+        if (TryPowerShellExecutableDetection())
+        {
+            _logger?.LogDebug("PowerShell detected via executable detection");
+            return true;
+        }
+
+        _logger?.LogWarning("PowerShell not detected via any method");
+        return false;
+    }
+
+    private bool TryPowerShellSdkMinimal()
+    {
+        try
+        {
+            // Create a completely minimal session state
+            var initialSessionState = InitialSessionState.CreateDefault2();
+            
+            // Try with restricted command set to avoid snap-in issues
+            using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+            runspace.Open();
+            
+            using var ps = PowerShell.Create();
+            ps.Runspace = runspace;
+            ps.AddScript("$PSVersionTable.PSVersion");
+            
+            var results = ps.Invoke();
+            return !ps.HadErrors && results.Count > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "PowerShell SDK minimal session state failed");
+            return false;
+        }
+    }
+
+    private bool TryPowerShellSdkDefault()
+    {
         try
         {
             using var ps = PowerShell.Create();
@@ -77,12 +130,116 @@ public class SystemRequirementsService : ISystemRequirementsService
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to check PowerShell availability");
+            _logger?.LogDebug(ex, "PowerShell SDK default session state failed");
+            return false;
+        }
+    }
+
+    private bool TryPowerShellExecutableDetection()
+    {
+        try
+        {
+            // Check for PowerShell executables in common locations
+            var powershellLocations = new[]
+            {
+                @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+                @"C:\Program Files\PowerShell\7\pwsh.exe",
+                Environment.ExpandEnvironmentVariables(@"%ProgramFiles%\PowerShell\7\pwsh.exe"),
+                Environment.ExpandEnvironmentVariables(@"%ProgramFiles(x86)%\PowerShell\7\pwsh.exe")
+            };
+
+            foreach (var location in powershellLocations)
+            {
+                if (File.Exists(location))
+                {
+                    _logger?.LogDebug("Found PowerShell executable: {Location}", location);
+                    return true;
+                }
+            }
+
+            // Check PATH environment variable
+            var path = Environment.GetEnvironmentVariable("PATH");
+            if (path != null)
+            {
+                var pathEntries = path.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var pathEntry in pathEntries)
+                {
+                    if (pathEntry.ToLowerInvariant().Contains("powershell"))
+                    {
+                        var psExe = Path.Combine(pathEntry, "powershell.exe");
+                        var pwshExe = Path.Combine(pathEntry, "pwsh.exe");
+                        
+                        if (File.Exists(psExe) || File.Exists(pwshExe))
+                        {
+                            _logger?.LogDebug("Found PowerShell in PATH: {PathEntry}", pathEntry);
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "PowerShell executable detection failed");
             return false;
         }
     }
 
     private string GetPowerShellVersion()
+    {
+        // Try System.Management.Automation with minimal session state
+        var version = TryGetPowerShellVersionMinimal();
+        if (!string.IsNullOrEmpty(version))
+        {
+            return version;
+        }
+
+        // Try System.Management.Automation with default session state
+        version = TryGetPowerShellVersionDefault();
+        if (!string.IsNullOrEmpty(version))
+        {
+            return version;
+        }
+
+        // Fallback to executable version detection
+        version = TryGetPowerShellVersionExecutable();
+        if (!string.IsNullOrEmpty(version))
+        {
+            return version;
+        }
+
+        return "Not Available";
+    }
+
+    private string? TryGetPowerShellVersionMinimal()
+    {
+        try
+        {
+            var initialSessionState = InitialSessionState.CreateDefault2();
+            
+            using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+            runspace.Open();
+            
+            using var ps = PowerShell.Create();
+            ps.Runspace = runspace;
+            ps.AddScript("$PSVersionTable.PSVersion.ToString()");
+            
+            var results = ps.Invoke();
+            if (!ps.HadErrors && results.Count > 0)
+            {
+                return results[0]?.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "Failed to get PowerShell version via minimal session state");
+        }
+        return null;
+    }
+
+    private string? TryGetPowerShellVersionDefault()
     {
         try
         {
@@ -91,14 +248,51 @@ public class SystemRequirementsService : ISystemRequirementsService
             var results = ps.Invoke();
             if (!ps.HadErrors && results.Count > 0)
             {
-                return results[0]?.ToString() ?? "Unknown";
+                return results[0]?.ToString();
             }
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to get PowerShell version");
+            _logger?.LogDebug(ex, "Failed to get PowerShell version via default session state");
         }
-        return "Not Available";
+        return null;
+    }
+
+    private string? TryGetPowerShellVersionExecutable()
+    {
+        try
+        {
+            var powershellLocations = new[]
+            {
+                (@"C:\Program Files\PowerShell\7\pwsh.exe", "PowerShell Core"),
+                (@"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", "Windows PowerShell"),
+                (Environment.ExpandEnvironmentVariables(@"%ProgramFiles%\PowerShell\7\pwsh.exe"), "PowerShell Core"),
+                (Environment.ExpandEnvironmentVariables(@"%ProgramFiles(x86)%\PowerShell\7\pwsh.exe"), "PowerShell Core")
+            };
+
+            foreach (var (location, type) in powershellLocations)
+            {
+                if (File.Exists(location))
+                {
+                    try
+                    {
+                        var versionInfo = System.Diagnostics.FileVersionInfo.GetVersionInfo(location);
+                        var version = versionInfo.ProductVersion ?? versionInfo.FileVersion ?? "Unknown";
+                        return $"{version} ({type})";
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogDebug(ex, "Failed to get version info for {Location}", location);
+                        return $"Available ({type})";
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "Failed to get PowerShell version via executable detection");
+        }
+        return null;
     }
 
     private bool CheckDomainMembership()
