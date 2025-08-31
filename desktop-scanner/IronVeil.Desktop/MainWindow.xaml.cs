@@ -285,55 +285,28 @@ public partial class MainWindow : Window
         
         StatusBarText.Text = $"Scan completed: {_currentScanSession.Results.Count} results";
         
-        // Auto-upload results if enabled
-        if (_configurationService.Configuration.Security.AutoUploadResults && _isAuthenticated)
+        // Auto-upload results if authenticated
+        if (_isAuthenticated && _currentScanSession.Results.Any())
         {
-            await UploadScanResultsAsync();
+            StatusBarText.Text = "Uploading results to dashboard...";
+            try
+            {
+                await UploadScanResultsAsync();
+                OpenDashboardButton.IsEnabled = true;
+                StatusBarText.Text = "Results uploaded - Click 'Open Dashboard' to view";
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to upload scan results");
+                StatusBarText.Text = "Upload failed - Results saved locally";
+            }
+        }
+        else if (!_isAuthenticated)
+        {
+            StatusBarText.Text = "Scan complete - Login to upload results to dashboard";
         }
     }
 
-    private async void UploadResultsButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_currentScanSession == null || !_currentScanSession.Results.Any())
-        {
-            MessageBox.Show("No scan results to upload.", "Upload Error", 
-                          MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        if (!_isAuthenticated)
-        {
-            MessageBox.Show("Please login before uploading results.", "Authentication Required", 
-                          MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        try
-        {
-            UploadResultsButton.IsEnabled = false;
-            UploadResultsButton.Content = "Uploading...";
-            StatusBarText.Text = "Uploading scan results to dashboard...";
-
-            await UploadScanResultsAsync();
-            
-            UploadResultsButton.Content = "✓ Uploaded";
-            StatusBarText.Text = "Results uploaded successfully - View in dashboard";
-            OpenDashboardButton.IsEnabled = true;
-            
-            // Hide upload button after successful upload
-            await Task.Delay(2000);
-            UploadResultsButton.Visibility = Visibility.Collapsed;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to upload scan results");
-            MessageBox.Show($"Failed to upload results: {ex.Message}", "Upload Error", 
-                          MessageBoxButton.OK, MessageBoxImage.Error);
-            UploadResultsButton.IsEnabled = true;
-            UploadResultsButton.Content = "Upload to Dashboard";
-            StatusBarText.Text = "Upload failed";
-        }
-    }
 
     private Border CreateFindingItem(string severity, string description)
     {

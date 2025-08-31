@@ -247,7 +247,6 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             
                             <Button Grid.Column="1" Name="StartScanButton" 
@@ -259,22 +258,14 @@
                                     IsEnabled="False"
                                     Click="StartScanButton_Click"/>
                             
-                            <Button Grid.Column="2" Name="UploadResultsButton" 
-                                    Content="Upload Results" 
-                                    Style="{StaticResource PrimaryButton}"
-                                    Width="130"
-                                    Height="38"
-                                    Margin="0,0,10,0"
-                                    Visibility="Collapsed"
-                                    Click="UploadResultsButton_Click"/>
-                            
-                            <Button Grid.Column="3" Name="OpenDashboardButton" 
+                            <Button Grid.Column="2" Name="OpenDashboardButton" 
                                     Content="Open Dashboard" 
                                     Style="{StaticResource SecondaryButton}"
                                     Width="140"
                                     Height="38"
                                     IsEnabled="False"
                                     Click="OpenDashboardButton_Click"/>
+                            
                         </Grid>
                         
                         <!-- Scan Progress (shown during scan) -->

@@ -1,7 +1,7 @@
 ---
 name: powershell-security-rules-developer
 description: develop PowerShell security rules with standardized JSON output
-model: sonnet
+model: opus
 color: green
 ---
 
