@@ -180,6 +180,56 @@ The project uses six specialized agents with defined responsibilities:
 - Real-time dashboard updates from scan results
 - End-to-end workflow: scan → upload → dashboard → insights
 
+### Phase Completion Procedures
+
+**MANDATORY: At the completion of every phase, you MUST perform these tasks:**
+
+1. **Update TASKS.md Phase Status**:
+   - Mark completed phase with ✅ COMPLETED status
+   - Add completion metadata: date, duration, report location
+   - Update next phase to 🚀 IN EXECUTION or ⏳ PENDING as appropriate
+   - Update Integration Checkpoints section to reflect current progress
+
+2. **Create Phase Completion Report**:
+   - Generate comprehensive `PHASE{N}-COMPLETION-SUMMARY.md` report
+   - Include: objectives achieved, technical implementation details, success metrics
+   - Document integration points available for next phases
+   - Provide reproduction commands and local development access
+
+3. **Organize Development Documentation**:
+   - Move completion report to `/development_reports/` directory
+   - Update TASKS.md references to point to new report location
+   - Ensure `/development_reports/` directory exists before moving files
+
+**Example Phase Completion Updates for TASKS.md**:
+```markdown
+## Phase N: Phase Name ✅ COMPLETED
+**🖥️ Development Environment**: Environment Type
+**Completed**: Date | **Duration**: Time | **Report**: `/development_reports/PHASEN-COMPLETION-SUMMARY.md`
+
+### N.1 Subsection Name **[agent-name]** ✅
+- [x] Completed task 1
+- [x] Completed task 2
+
+## Phase N+1: Next Phase Name 🚀 IN EXECUTION  
+**🖥️ Development Environment**: Environment Type
+**Started**: Date | **Status**: In progress description
+
+### N+1.1 Subsection Name **[agent-name]** 🚀 IN PROGRESS
+- [ ] Pending task 1
+- [ ] Pending task 2
+```
+
+**Integration Checkpoints Updates**:
+```markdown
+### Integration Checkpoints
+- **Phase N**: ✅ Brief description of what was completed
+- **Phase N+1**: 🚀 Brief description of what's in progress (IN PROGRESS)
+- **Phase N+2**: Brief description of what's pending
+```
+
+This systematic approach ensures consistent project tracking and clear visibility into development progress across all phases.
+
 ### Integration Requirements
 
 #### PowerShell Rule Specifications
