@@ -14,17 +14,24 @@ ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "org_isolation" ON organizations FOR ALL 
 TO authenticated
 USING (
-  id IN (
-    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
+  id = (
+    SELECT up.organization_id 
+    FROM user_profiles up 
+    WHERE up.id = auth.uid() 
+    LIMIT 1
   )
 );
 
--- User profiles: Users can see profiles in their organization
+-- User profiles: Users can see their own profile and profiles in their organization
 CREATE POLICY "user_profiles_select" ON user_profiles FOR SELECT
 TO authenticated
 USING (
-  organization_id IN (
-    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
+  id = auth.uid() OR
+  organization_id = (
+    SELECT up.organization_id 
+    FROM user_profiles up 
+    WHERE up.id = auth.uid() 
+    LIMIT 1
   )
 );
 
@@ -43,9 +50,11 @@ WITH CHECK (id = auth.uid());
 CREATE POLICY "user_profiles_admin_manage" ON user_profiles FOR ALL
 TO authenticated
 USING (
-  organization_id IN (
-    SELECT organization_id FROM user_profiles 
-    WHERE id = auth.uid() AND role IN ('admin')
+  EXISTS (
+    SELECT 1 FROM user_profiles up
+    WHERE up.id = auth.uid() 
+      AND up.role = 'admin'
+      AND up.organization_id = user_profiles.organization_id
   )
 );
 
@@ -53,8 +62,11 @@ USING (
 CREATE POLICY "scans_org_policy" ON scans FOR ALL
 TO authenticated
 USING (
-  organization_id IN (
-    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
+  organization_id = (
+    SELECT up.organization_id 
+    FROM user_profiles up 
+    WHERE up.id = auth.uid() 
+    LIMIT 1
   )
 );
 
@@ -62,8 +74,11 @@ USING (
 CREATE POLICY "findings_org_policy" ON findings FOR ALL
 TO authenticated
 USING (
-  organization_id IN (
-    SELECT organization_id FROM user_profiles WHERE id = auth.uid()
+  organization_id = (
+    SELECT up.organization_id 
+    FROM user_profiles up 
+    WHERE up.id = auth.uid() 
+    LIMIT 1
   )
 );
 

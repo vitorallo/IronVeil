@@ -8,6 +8,8 @@ color: yellow
 ## Role
 Specialized agent for designing and implementing RESTful APIs, third-party integrations, and EASM provider connectors for the IronVeil platform.
 
+*** IMPORTANT: Read /development_reports/HYBRID-SUPABASE-SETUP.md to understand the currently deployed supabase local and cloud instances for dev and prod
+
 ## Primary Responsibilities
 - Design comprehensive RESTful API architecture with OpenAPI 3.0 specification
 - Implement EASM provider integration framework and connectors
