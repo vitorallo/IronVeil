@@ -91,16 +91,73 @@ Development approach: **Minimal desktop scanner + Full-featured cloud backend**
 ## Phase 4: Cloud Backend Advanced Features
 **🖥️ Development Environment: PRIMARY (Mac) - Full-stack web development**
 
-### 4.1 Real-Time Dashboard & Analytics **[webapp-coder-expert]**
-- [ ] Implement live scan progress tracking with WebSocket updates
-- [ ] Create interactive security score visualizations
-- [ ] Build historical trend analysis with time-series charts
-- [ ] Design responsive dashboard for different screen sizes
-- [ ] Implement filtering and search across scan results
-- [ ] Create export functionality (PDF, CSV, JSON)
-- [ ] **Integration Checkpoint**: Dashboard updates in real-time from desktop scans
+### 4.1 Frontend Web Application Setup **[webapp-coder-expert]**
+**🖥️ Development Environment: PRIMARY (Mac) - React + Next.js development**
+- [ ] **Project Initialization**: Create Next.js 14 project in `/webapp` folder with TypeScript
+- [ ] **UI Framework Setup**: Configure TailwindCSS + shadcn/ui component library  
+- [ ] **Authentication Integration**: Implement Supabase Auth with JWT token handling
+- [ ] **Routing Structure**: Set up Next.js App Router with protected routes and layouts
+- [ ] **State Management**: Implement React Context or Zustand for global state management
+- [ ] **Component Architecture**: Create reusable UI components (forms, tables, cards, modals)
+- [ ] **Dashboard Layout**: Build responsive dashboard layout with navigation and sidebar
+- [ ] **Authentication Pages**: Create login, signup, and password reset pages
+- [ ] **Organization Management**: Multi-tenant organization selection and switching
+- [ ] **Environment Configuration**: Set up environment variables for Supabase connection
+- [ ] **Development Scripts**: Configure hot reload and development server
+- [ ] **Integration Checkpoint**: Frontend authenticates with Supabase and displays basic dashboard
 
-### 4.2 Multi-Tenant Organization Management **[webapp-coder-expert + supabase-integration-specialist]**
+### 4.2 NestJS Backend API Development **[api-integration-developer]**  
+**🖥️ Development Environment: PRIMARY (Mac) - Node.js + TypeScript development**
+- [ ] **Project Setup**: Initialize NestJS project in `/backend` folder with TypeScript configuration
+- [ ] **Database Integration**: Configure Supabase client with connection pooling and error handling
+- [ ] **Authentication Module**: Implement JWT strategy with Supabase Auth token validation
+- [ ] **Scan Upload API**: Create endpoints for receiving JSON scan results from desktop scanner
+  - POST `/api/scans/upload` - Accept multipart scan data with metadata
+  - GET `/api/scans` - List scans with pagination and filtering
+  - GET `/api/scans/:id` - Retrieve specific scan details and findings
+- [ ] **Organizations API**: Multi-tenant CRUD operations with Row Level Security
+  - GET/POST/PUT `/api/organizations` - Organization management
+  - POST `/api/organizations/:id/invite` - User invitation system
+- [ ] **Users API**: Profile management and role-based access control
+  - GET/PUT `/api/users/profile` - User profile operations
+  - GET `/api/users/organizations` - User organization memberships
+- [ ] **Analytics API**: Aggregated scan data and security scoring
+  - GET `/api/analytics/dashboard` - Dashboard summary statistics
+  - GET `/api/analytics/trends` - Historical trend data
+  - GET `/api/analytics/scores` - Security score calculations
+- [ ] **Validation & DTOs**: Request/response validation with class-validator decorators
+- [ ] **Error Handling**: Global exception filters and structured error responses
+- [ ] **Logging**: Structured logging with Winston for monitoring and debugging
+- [ ] **API Documentation**: Swagger/OpenAPI auto-generated documentation
+- [ ] **Rate Limiting**: Implement throttling and API abuse protection
+- [ ] **Integration Checkpoint**: Backend accepts desktop uploads and serves frontend data
+
+### 4.3 Real-Time Dashboard Features **[webapp-coder-expert]**
+**🖥️ Development Environment: PRIMARY (Mac) - React components + data visualization**
+- [ ] **Scan Results Display**: Create components to display scan findings and metadata
+- [ ] **Security Score Visualizations**: Interactive charts for security scores and trends
+- [ ] **Historical Analysis**: Time-series charts for tracking security posture over time
+- [ ] **Filtering & Search**: Advanced filtering across scan results with search functionality  
+- [ ] **Export Features**: PDF, CSV, JSON export functionality for reports
+- [ ] **Responsive Design**: Ensure dashboard works across desktop, tablet, and mobile
+- [ ] **Real-time Updates**: Supabase subscriptions for live scan result updates (deferred)
+- [ ] **Integration Checkpoint**: Dashboard displays uploaded scan results with interactive features
+
+### 4.4 Integration Layer & Development Environment **[api-integration-developer + webapp-coder-expert]**
+**🖥️ Development Environment: PRIMARY (Mac) - Full-stack integration**
+- [ ] **Folder Structure**: Create organized `/webapp` and `/backend` directory structures
+- [ ] **Package Configuration**: Setup package.json files with proper dependencies and scripts
+- [ ] **Environment Variables**: Secure configuration management for Supabase connection strings
+- [ ] **TypeScript Configuration**: Consistent TypeScript setup across frontend and backend
+- [ ] **API Client**: Frontend HTTP client with authentication headers and error handling
+- [ ] **CORS Configuration**: Proper cross-origin resource sharing setup for development
+- [ ] **Development Scripts**: Concurrent development servers with hot reload
+- [ ] **Shared Types**: Common TypeScript interfaces between frontend and backend
+- [ ] **Error Handling**: Consistent error responses and user feedback mechanisms
+- [ ] **File Upload Pipeline**: Secure scan result processing from desktop to database
+- [ ] **Integration Checkpoint**: Complete development environment with frontend-backend communication
+
+### 4.5 Multi-Tenant Organization Management **[webapp-coder-expert + supabase-integration-specialist]**
 **🖥️ Development Environment: PRIMARY (Mac) - Database + frontend integration**
 - [ ] Implement organization creation and tier management
 - [ ] Create user invitation and role assignment system
@@ -109,7 +166,7 @@ Development approach: **Minimal desktop scanner + Full-featured cloud backend**
 - [ ] Create audit logs for compliance and monitoring
 - [ ] **Integration Checkpoint**: Multiple organizations can operate independently
 
-### 4.3 EASM Provider Integration Framework **[api-integration-developer]**
+### 4.6 EASM Provider Integration Framework **[api-integration-developer]**
 **🖥️ Development Environment: PRIMARY (Mac) - API development + third-party integrations**
 - [ ] Design modular connector architecture for third-party platforms
 - [ ] Implement bulk data export APIs with pagination
@@ -284,8 +341,13 @@ Development approach: **Minimal desktop scanner + Full-featured cloud backend**
   - API client for cloud backend integration
   - Single-file standalone executable (150KB)
 - **Phase 3**: PowerShell rules output standardized JSON format (NEXT)
-- **Phase 4**: Real-time dashboard updates from desktop scans
-- **Phase 6**: End-to-end workflow: scan → upload → dashboard → insights
+- **Phase 4**: Complete web platform with frontend and backend APIs
+  - Frontend: Next.js 14 + React 18 + TailwindCSS authentication and dashboard
+  - Backend: NestJS API with scan upload, authentication, and analytics endpoints
+  - Integration: Development environment with frontend-backend communication
+- **Phase 5**: Desktop scanner user experience and scan processing
+- **Phase 6**: Advanced analytics and enterprise features
+- **End-to-end**: scan → upload → API processing → dashboard insights
 
 ### Code Standards
 - Follow secure coding practices
