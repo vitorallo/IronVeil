@@ -10,6 +10,7 @@ Each indicator includes a unique reference ID, tier classification, description,
 - **Tier 1 (Critical)**: Indicators that can lead to complete domain compromise (Weight: 9-10)
 - **Tier 2 (High Impact)**: Indicators enabling privilege escalation and significant lateral movement (Weight: 7-8)  
 - **Tier 3 (Medium Impact)**: Indicators that expand attack surface and enable initial access (Weight: 5-6)
+- **Tier 4 (Low Impact)**: Simple operational checks and basic security hygiene (Weight: 3-4)
 
 ### Reference ID Format
 - **Active Directory**: `AD-T[Tier]-[Sequential Number]` (e.g., AD-T1-001)
@@ -151,6 +152,50 @@ Each indicator includes a unique reference ID, tier classification, description,
 * **References:**
   * Semperis Blog: 7 Active Directory Misconfigurations to Find and Fix—Now
 
+### Tier 4: Low Impact - Basic Security Hygiene
+
+#### AD-T4-001: Default Domain Administrator Account Not Renamed
+* **Description:** The default "Administrator" account in Active Directory has not been renamed from its well-known name, making it an obvious target for attackers.
+* **Significance:** Using default account names makes it easier for attackers to identify high-value targets during reconnaissance and brute-force attacks.
+* **Assessment:** Check if the default Administrator account (RID 500) still uses the name "Administrator". Recommend renaming to a non-obvious name.
+* **References:**
+  * Microsoft Learn: Best practices for securing Active Directory
+
+#### AD-T4-002: Guest Account Not Disabled
+* **Description:** The built-in Guest account remains enabled, providing a potential avenue for unauthorized access even when no credentials are provided.
+* **Significance:** While typically having minimal permissions, enabled Guest accounts can be used for information gathering and as stepping stones for further attacks.
+* **Assessment:** Verify that the built-in Guest account is disabled across all domains in the forest.
+* **References:**
+  * Microsoft Learn: Best practices for securing Active Directory
+
+#### AD-T4-003: Domain Controller Event Log Retention Too Short
+* **Description:** Domain controllers have insufficient event log retention periods, potentially losing critical security events before they can be analyzed.
+* **Significance:** Short log retention reduces incident response capabilities and forensic analysis potential. Critical security events may be overwritten before investigation.
+* **Assessment:** Check event log maximum size and retention settings on all domain controllers. Recommend minimum 30-day retention for security logs.
+* **References:**
+  * Microsoft Learn: Best practices for securing Active Directory
+
+#### AD-T4-004: Backup Operators Group Contains User Accounts
+* **Description:** The Backup Operators group contains regular user accounts instead of dedicated service accounts, increasing the risk of privilege abuse.
+* **Significance:** Backup Operators have significant privileges including the ability to bypass file permissions. Regular user accounts in this group expand the attack surface.
+* **Assessment:** Enumerate members of the Backup Operators group and identify any standard user accounts that should be removed or replaced with dedicated service accounts.
+* **References:**
+  * Microsoft Learn: Best practices for securing Active Directory
+
+#### AD-T4-005: Domain Controller DNS Configuration Issues
+* **Description:** Domain controllers have suboptimal DNS configurations that could impact AD functionality and potentially create security vulnerabilities.
+* **Significance:** Poor DNS configuration can lead to service disruptions, authentication failures, and potential DNS-based attacks against the domain infrastructure.
+* **Assessment:** Verify that domain controllers use appropriate DNS servers, have correct DNS suffixes, and are not using external DNS servers as primary.
+* **References:**
+  * Microsoft Learn: Best practices for securing Active Directory
+
+#### AD-T4-006: Insecure SYSVOL Share Permissions
+* **Description:** The SYSVOL share has overly permissive permissions that could allow unauthorized access to Group Policy files and other sensitive domain data.
+* **Significance:** SYSVOL contains sensitive domain information including Group Policy data. Excessive permissions could lead to information disclosure or policy tampering.
+* **Assessment:** Review SYSVOL share permissions and ensure they follow the principle of least privilege. Check for any unusual or overly broad permission grants.
+* **References:**
+  * Microsoft Learn: Best practices for securing Active Directory
+
 ---
 
 ## Entra ID Security Indicators
@@ -230,6 +275,50 @@ Each indicator includes a unique reference ID, tier classification, description,
 * **Assessment:** Verify Entra ID user settings to determine if non-administrative users are allowed to register applications.
 * **References:**
   * Semperis Blog: Purple Knight Introduces Entra ID Security Indicators
+
+### Tier 4: Low Impact - Basic Security Hygiene
+
+#### EID-T4-001: Default Global Administrator Account Still Active
+* **Description:** The initial Global Administrator account created during tenant setup remains active and may not follow organizational naming conventions or security practices.
+* **Significance:** Default admin accounts are often targets for attackers and may not be subject to the same monitoring and security controls as purpose-built administrative accounts.
+* **Assessment:** Identify the original Global Administrator account and verify if it should be disabled or renamed according to organizational standards.
+* **References:**
+  * Microsoft Learn: Best practices to secure with Microsoft Entra ID
+
+#### EID-T4-002: Users Can Create Microsoft 365 Groups
+* **Description:** Regular users have permissions to create Microsoft 365 groups without administrative oversight, potentially leading to uncontrolled resource proliferation.
+* **Significance:** Uncontrolled group creation can lead to data governance issues, compliance violations, and difficulty in managing organizational resources.
+* **Assessment:** Check if the "Users can create Microsoft 365 groups" setting is enabled in Entra ID settings and evaluate if it should be restricted.
+* **References:**
+  * Microsoft Learn: Best practices to secure with Microsoft Entra ID
+
+#### EID-T4-003: Password Protection Not Configured
+* **Description:** Entra ID Password Protection for on-premises Active Directory is not configured, allowing weak passwords that would be blocked in the cloud.
+* **Significance:** Without password protection synchronization, on-premises users may use weak passwords that don't meet cloud security standards.
+* **Assessment:** Verify if Azure AD Password Protection agents are deployed and configured for on-premises domain controllers.
+* **References:**
+  * Microsoft Learn: Best practices to secure with Microsoft Entra ID
+
+#### EID-T4-004: Self-Service Password Reset Not Enabled
+* **Description:** Self-service password reset (SSPR) is not enabled, forcing users to rely on help desk support and potentially leading to weaker password practices.
+* **Significance:** Without SSPR, users may resort to weaker passwords they can remember, and help desk overhead increases for routine password resets.
+* **Assessment:** Check if SSPR is enabled and properly configured with appropriate authentication methods and user coverage.
+* **References:**
+  * Microsoft Learn: Best practices to secure with Microsoft Entra ID
+
+#### EID-T4-005: LinkedIn Account Connections Enabled
+* **Description:** Users are allowed to connect their LinkedIn accounts to their work profiles, potentially creating data privacy and professional boundary concerns.
+* **Significance:** While generally low risk, this feature may not align with organizational privacy policies or professional separation requirements.
+* **Assessment:** Review the LinkedIn account connections setting in Entra ID user settings and evaluate against organizational privacy policies.
+* **References:**
+  * Microsoft Learn: Best practices to secure with Microsoft Entra ID
+
+#### EID-T4-006: Directory Synchronization Errors Present
+* **Description:** Directory synchronization between on-premises Active Directory and Entra ID is experiencing errors that could impact user authentication or access.
+* **Significance:** Sync errors can lead to authentication issues, outdated user information, and potential security gaps between on-premises and cloud identities.
+* **Assessment:** Monitor Azure AD Connect sync status and identify any persistent synchronization errors that need remediation.
+* **References:**
+  * Microsoft Learn: Best practices to secure with Microsoft Entra ID
 
 ---
 
@@ -325,6 +414,11 @@ Implement privilege escalation detection:
 Complete the assessment with attack surface expansion checks:
 - AD Tier 3 indicators (AD-T3-001 through AD-T3-014)
 - EID Tier 3 indicators (EID-T3-001 through EID-T3-004)
+
+### Phase 4: Basic Hygiene Indicators (Tier 4)
+Implement simple operational and hygiene checks:
+- AD Tier 4 indicators (AD-T4-001 through AD-T4-006)
+- EID Tier 4 indicators (EID-T4-001 through EID-T4-006)
 
 ## References
 
