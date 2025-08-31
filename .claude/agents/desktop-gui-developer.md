@@ -1,4 +1,9 @@
-# Desktop GUI Developer Agent
+---
+name: desktop-gui-developer
+description: develop minimal WPF desktop scanner with PowerShell integration
+model: sonnet
+color: blue
+---
 
 ## Role
 Specialized agent for developing the minimal WPF desktop scanner application for IronVeil.

@@ -101,8 +101,6 @@
       "System.DirectoryServices", 
       "Microsoft.Graph SDK",
       "System.Management.Automation",
-      "QuestPDF",
-      "OxyPlot/LiveCharts"
     ]
   }
 }
