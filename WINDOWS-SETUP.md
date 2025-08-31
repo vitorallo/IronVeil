@@ -124,7 +124,8 @@ mkdir C:\Dev
 cd C:\Dev
 
 # Clone the repository
-gh repo clone vitorallo/IronVeil
+
+
 cd IronVeil
 ```
 

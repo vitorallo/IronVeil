@@ -1,0 +1,108 @@
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@executeautomation/mcp-playwright"
+        ]
+      },
+      "context7": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@context7/mcp-server"
+        ]
+      },
+      "supabase": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@supabase/mcp-server"
+        ]
+      },
+      "firecrawl-mcp": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "firecrawl-mcp"
+        ],
+        "env": {}
+      },
+      "ide": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@vscode/mcp-server"
+        ]
+      }
+    }
+  },
+  "rules": [
+    "Use MCP servers for enhanced functionality when available",
+    "Prefer MCP-provided tools for web scraping and API interactions",
+    "Use context7 for up-to-date library documentation",
+    "Use supabase MCP server for database operations when applicable"
+  ],
+  "globalSettings": {
+    "codeStyle": {
+      "preferAsync": true,
+      "errorHandling": "comprehensive",
+      "documentation": "inline-comments-minimal"
+    },
+    "security": {
+      "validateInputs": true,
+      "sanitizeOutputs": true,
+      "followSecurityBestPractices": true
+    }
+  },
+  "projectSpecific": {
+    "name": "IronVeil Identity Security Scanner",
+    "description": "Identity Security Scanner for Active Directory and Microsoft Entra ID environments",
+    "language": "C#",
+    "framework": ".NET 8",
+    "platform": "Windows",
+    "architecture": "desktop-first-hybrid",
+    "specializedAgents": {
+      "powershell-security-rules-developer": {
+        "purpose": "Develops PowerShell-based security check rules",
+        "workspace": "/indicators",
+        "responsibilities": [
+          "Create standardized PowerShell security check scripts",
+          "Follow implementation patterns and pseudocode templates",
+          "Ensure rules return standardized result objects for C# consumption",
+          "Test rules independently before integration"
+        ]
+      },
+      "desktop-gui-developer": {
+        "purpose": "Handles WPF desktop application development",
+        "responsibilities": [
+          "UI design and WPF implementation",
+          "C#/.NET backend development", 
+          "LDAP/Graph API integration",
+          "Rule engine that executes PowerShell scripts",
+          "Report generation and export functionality"
+        ]
+      }
+    },
+    "developmentPhases": [
+      "Project Foundation & Setup",
+      "Data Collection Modules", 
+      "Security Analysis Engine",
+      "User Interface Development",
+      "Reporting & Export",
+      "CLI & Automation Support",
+      "Testing & Validation",
+      "Deployment & Distribution"
+    ],
+    "keyTechnologies": [
+      "WPF (Windows Presentation Foundation)",
+      "System.DirectoryServices", 
+      "Microsoft.Graph SDK",
+      "System.Management.Automation",
+      "QuestPDF",
+      "OxyPlot/LiveCharts"
+    ]
+  }
+}

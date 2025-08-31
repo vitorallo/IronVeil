@@ -1,247 +1,286 @@
-# Desktop Application Development Tasks - IronVeil
+# IronVeil MicroSaaS Development Tasks - Hybrid Architecture
 
-## Phase 1: Project Foundation & Setup
+## Overview
+Development approach: **Minimal desktop scanner + Full-featured cloud backend**
+- Desktop: Simple WPF scanner with PowerShell engine, uploads to cloud
+- Backend: Supabase + NestJS + Next.js + React with real-time dashboard
+- Integration: API-first design for EASM providers and third-party platforms
 
-### 1.1 Project Structure & Solution Setup **[desktop-gui-developer]**
-- [ ] Create .NET 8 solution with WPF application project
-- [ ] Set up project structure following the architecture defined in CLAUDE.md
-- [ ] Configure NuGet packages:
-  - System.DirectoryServices (AD integration)
-  - Microsoft.Graph SDK (Entra ID integration)
-  - System.Management.Automation (PowerShell integration)
-  - QuestPDF (PDF reporting)
-  - OxyPlot or LiveCharts (dashboard visualizations)
-  - System.CommandLine (CLI support)
-- [ ] Create core folder structure matching architectural components
-- [ ] Set up build configuration for single-file executable publishing
+## Phase 1: Supabase Backend Foundation
+**🖥️ Development Environment: PRIMARY (Mac) - Cloud development stack**
 
-### 1.2 Core Infrastructure **[desktop-gui-developer]**
-- [ ] Implement base classes for security checks following patterns in `/indicators/implementation-patterns.md`
-- [ ] Create LDAP connection and query utilities
-- [ ] Implement Microsoft Graph API authentication and query framework
-- [ ] Create result object models (CheckResult, CheckMetadata, RiskItem, etc.)
-- [ ] Implement risk scoring algorithms from implementation patterns
-- [ ] Create error handling and resilience patterns
-- [ ] **Integration Checkpoint**: Establish PowerShell rule execution framework using System.Management.Automation
+### 1.1 Database Schema & Authentication **[supabase-integration-specialist]**
+- [ ] Create Supabase project and configure database schema
+- [ ] Implement multi-tenant organizations table with tier support
+- [ ] Set up user profiles linked to Supabase Auth
+- [ ] Create scans and findings tables with proper relationships
+- [ ] Configure Row Level Security (RLS) policies for data isolation
+- [ ] Set up authentication flows (JWT, API keys)
+- [ ] Create database functions for analytics and scoring
+- [ ] Implement real-time subscriptions for dashboard updates
 
-## Phase 2: Data Collection Modules
+### 1.2 Backend API Development **[api-integration-developer]**
+**🖥️ Development Environment: PRIMARY (Mac) - Node.js + TypeScript development**
+- [ ] Set up NestJS project with TypeScript and proper structure
+- [ ] Implement authentication guards (JWT, API key validation)
+- [ ] Create scan ingestion endpoints for desktop application
+- [ ] Build analytics endpoints for dashboard consumption
+- [ ] Implement webhook system for real-time notifications
+- [ ] Create EASM provider integration framework
+- [ ] Set up rate limiting and API security mechanisms
+- [ ] Generate OpenAPI 3.0 documentation with Swagger
 
-### 2.1 Active Directory Collector **[desktop-gui-developer]**
-- [ ] Implement LDAP query builder with common filter patterns
-- [ ] Create domain enumeration and availability checking
-- [ ] Implement privilege group detection utilities
-- [ ] Create time-based filtering for change detection
-- [ ] Implement bitwise attribute filtering for UserAccountControl flags
-- [ ] Add metadata processing for attribute change tracking
-- [ ] Create PowerShell cmdlet integration wrapper
+### 1.3 Frontend Web Application **[webapp-coder-expert]**
+**🖥️ Development Environment: PRIMARY (Mac) - React + Next.js development**
+- [ ] Set up Next.js 14 project with TypeScript and Tailwind CSS
+- [ ] Configure Supabase client and authentication flows
+- [ ] Implement multi-tenant dashboard with real-time updates
+- [ ] Create scan results visualization with charts and tables
+- [ ] Build user management and organization settings
+- [ ] Implement responsive design with shadcn/ui components
+- [ ] Set up deployment pipeline with Vercel
+- [ ] **Integration Checkpoint**: End-to-end scan upload → dashboard display
 
-### 2.2 Entra ID Collector **[desktop-gui-developer]**
-- [ ] Implement Microsoft Graph API authentication (OAuth 2.0, service principal)
-- [ ] Create Graph API query utilities for users, groups, applications
-- [ ] Implement Conditional Access policy enumeration
-- [ ] Add service principal and app registration analysis
-- [ ] Create tenant configuration assessment utilities
-- [ ] Implement guest user and external identity analysis
+## Phase 2: Minimal Desktop Scanner
+**🪟 Development Environment: SECONDARY (Windows) - .NET WPF native development**
 
-### 2.3 Configuration Management **[desktop-gui-developer]**
-- [ ] Create ignore list processing functionality
-- [ ] Implement dynamic threshold calculation
-- [ ] Add environment size detection and scaling
-- [ ] Create domain-specific configuration handling
+### 2.1 Desktop Application Foundation **[desktop-gui-developer]**
+- [ ] Create minimal .NET 8 WPF application with clean UI
+- [ ] Configure NuGet packages (System.Management.Automation, HttpClient)
+- [ ] Implement backend selection dropdown (community vs enterprise)
+- [ ] Create secure authentication flow with OAuth 2.0 PKCE
+- [ ] Build API client for cloud backend communication
+- [ ] Implement basic progress monitoring and status display
+- [ ] **Integration Checkpoint**: Desktop can authenticate and connect to backend
 
-## Phase 3: Security Analysis Engine
+### 2.2 PowerShell Rule Engine Integration **[desktop-gui-developer + powershell-security-rules-developer]**
+**🪟 Development Environment: SECONDARY (Windows) - PowerShell + C# integration**
+- [ ] Implement PowerShell execution engine using System.Management.Automation
+- [ ] Create rule discovery system for `/indicators` folder scanning
+- [ ] Build rule metadata parser and validator
+- [ ] Implement secure rule execution with error handling
+- [ ] Create standardized JSON output processing
+- [ ] Add rule result aggregation and scoring
+- [ ] **Integration Checkpoint**: Desktop executes PowerShell rules and processes results
 
-### 3.1 Rule Engine Foundation **[desktop-gui-developer]**
-- [ ] Create rule loader that reads PowerShell scripts from `/indicators` folder
-- [ ] Implement rule execution engine with sandbox
-- [ ] Create rule metadata parser and validator
-- [ ] Implement result aggregation and correlation
-- [ ] Add rule dependency management
-- [ ] **Integration Checkpoint**: Test PowerShell rule execution and result parsing
+## Phase 3: PowerShell Security Rules Development
+**🪟 Development Environment: SECONDARY (Windows) - PowerShell scripting + AD/Entra testing**
 
-### 3.2 Core Security Checks **[powershell-security-rules-developer + desktop-gui-developer]**
-**PowerShell Rules Development (Priority Order):**
-- [ ] Privileged group membership changes detection
-- [ ] Unconstrained Kerberos delegation assessment
-- [ ] Protocol transition delegation detection
+### 3.1 Core Security Rules **[powershell-security-rules-developer]**
+**Priority AD/Entra ID Rules:**
+- [ ] Privileged group membership analysis with metadata output
+- [ ] Unconstrained Kerberos delegation detection
 - [ ] Inactive domain controller identification
 - [ ] Stale account detection (users and computers)
-- [ ] Dangerous UserAccountControl flags assessment
-- [ ] AdminSDHolder and delegation permission analysis
-- [ ] Kerberos encryption type assessment (RC4 usage)
-- [ ] LDAP signing requirement validation
-- [ ] Certificate template security evaluation
-
-**Integration Tasks:**
-- [ ] **Integration Checkpoint**: Validate each rule works with C# rule engine
-- [ ] **Testing**: Ensure rule metadata is properly parsed by desktop application
-- [ ] **Testing**: Verify rule results integrate with report generation
-
-### 3.3 Entra ID Specific Checks **[powershell-security-rules-developer + desktop-gui-developer]**
-**PowerShell Rules Development:**
-- [ ] MFA enforcement for privileged accounts
-- [ ] Application consent and permission assessment
+- [ ] UserAccountControl flags security assessment
+- [ ] LDAP signing and protocol security validation
+- [ ] MFA enforcement for privileged Entra ID accounts
 - [ ] Legacy authentication protocol detection
-- [ ] Guest user privilege analysis
-- [ ] Security defaults validation
-- [ ] Administrative unit utilization
-- [ ] Hybrid identity correlation checks
+- [ ] Application consent and permission assessment
+- [ ] **Integration Checkpoint**: All rules output standardized JSON format
 
-**Integration Tasks:**
-- [ ] **Integration Checkpoint**: Test Entra ID rules with Graph API integration
-- [ ] **Testing**: Validate hybrid identity correlation between AD and Entra ID rules
+### 3.2 Rule Output Standardization **[powershell-security-rules-developer]**
+**🪟 Development Environment: SECONDARY (Windows) - PowerShell testing + JSON validation**
+- [ ] Implement consistent metadata structure across all rules
+- [ ] Create standardized severity classification system
+- [ ] Build remediation guidance templates
+- [ ] Add MITRE ATT&CK framework mapping
+- [ ] Implement risk scoring algorithm integration
+- [ ] **Integration Checkpoint**: Desktop application processes all rule outputs correctly
 
-### 3.4 Risk Assessment & Correlation **[desktop-gui-developer]**
-- [ ] Implement weighted risk scoring algorithm
-- [ ] Create attack path analysis engine
-- [ ] Add hybrid identity risk correlation
-- [ ] Implement IoE vs IoC classification
-- [ ] Create trend analysis foundation
-- [ ] **Integration Checkpoint**: Ensure risk scoring works with PowerShell rule results
+## Phase 4: Cloud Backend Advanced Features
+**🖥️ Development Environment: PRIMARY (Mac) - Full-stack web development**
 
-## Phase 4: User Interface Development
+### 4.1 Real-Time Dashboard & Analytics **[webapp-coder-expert]**
+- [ ] Implement live scan progress tracking with WebSocket updates
+- [ ] Create interactive security score visualizations
+- [ ] Build historical trend analysis with time-series charts
+- [ ] Design responsive dashboard for different screen sizes
+- [ ] Implement filtering and search across scan results
+- [ ] Create export functionality (PDF, CSV, JSON)
+- [ ] **Integration Checkpoint**: Dashboard updates in real-time from desktop scans
 
-### 4.1 Main Application Window (WPF) **[desktop-gui-developer]**
-- [ ] Design and implement main window layout
-- [ ] Create scan configuration interface (AD, Entra ID, both)
-- [ ] Implement progress indication during scans
-- [ ] Add real-time status updates and logging
-- [ ] Create simple authentication setup for Entra ID
-- [ ] **Integration Checkpoint**: UI displays PowerShell rule execution status and results
+### 4.2 Multi-Tenant Organization Management **[webapp-coder-expert + supabase-integration-specialist]**
+**🖥️ Development Environment: PRIMARY (Mac) - Database + frontend integration**
+- [ ] Implement organization creation and tier management
+- [ ] Create user invitation and role assignment system
+- [ ] Build organization settings and configuration panels
+- [ ] Implement usage analytics and quota tracking
+- [ ] Create audit logs for compliance and monitoring
+- [ ] **Integration Checkpoint**: Multiple organizations can operate independently
 
-### 4.2 Dashboard & Results Display **[desktop-gui-developer]**
-- [ ] Design security scorecard visualization
-- [ ] Implement risk level summary charts
-- [ ] Create detailed findings list with filtering/sorting
-- [ ] Add remediation guidance display panels
-- [ ] Implement drill-down capability for detailed analysis
-- [ ] Create trend visualization (basic foundation)
-- [ ] **Integration Checkpoint**: Dashboard displays results from PowerShell security rules
+### 4.3 EASM Provider Integration Framework **[api-integration-developer]**
+**🖥️ Development Environment: PRIMARY (Mac) - API development + third-party integrations**
+- [ ] Design modular connector architecture for third-party platforms
+- [ ] Implement bulk data export APIs with pagination
+- [ ] Create webhook notification system for real-time events
+- [ ] Build authentication and rate limiting for external access
+- [ ] Create example connectors (CrimsonSeven, Shodan)
+- [ ] Generate comprehensive API documentation
+- [ ] **Integration Checkpoint**: EASM providers can consume scan data via API
 
-### 4.3 Settings & Configuration **[desktop-gui-developer]**
-- [ ] Create application settings management
-- [ ] Implement scan frequency and scope configuration
-- [ ] Add ignore list management interface
-- [ ] Create export format preferences
-- [ ] Add logging and diagnostic configuration
-- [ ] Add rule selection/configuration interface for PowerShell rules
+## Phase 5: Desktop Scanner User Experience
+**🪟 Development Environment: SECONDARY (Windows) - WPF UI/UX development**
 
-## Phase 5: Reporting & Export
+### 5.1 Minimal Desktop UI **[desktop-gui-developer]**
+- [ ] Create clean, simple main window with essential controls only
+- [ ] Implement backend selection dropdown with default to ironveil.crimson7.io
+- [ ] Build secure login form with OAuth 2.0 PKCE flow
+- [ ] Create scan progress indicator with real-time status updates
+- [ ] Implement basic results summary with critical findings count
+- [ ] Add "Open Dashboard" button to launch web interface
+- [ ] **Integration Checkpoint**: Desktop UI is intuitive and guides users to web dashboard
 
-### 5.1 Report Generation **[desktop-gui-developer]**
-- [ ] Implement JSON export for partner integration
-- [ ] Create PDF report generation using QuestPDF
-- [ ] Add CSV export for spreadsheet analysis
-- [ ] Implement HTML dashboard export
-- [ ] Create structured report templates
-- [ ] **Integration Checkpoint**: Reports include results from all PowerShell security rules
+### 5.2 Scan Processing & Upload **[desktop-gui-developer]**
+**🪟 Development Environment: SECONDARY (Windows) - C# + API integration**
+- [ ] Implement scan coordination and PowerShell rule execution
+- [ ] Create secure JSON result packaging for API upload
+- [ ] Build retry logic and offline handling for API failures
+- [ ] Implement scan metadata collection (environment info, timing)
+- [ ] Add basic error handling and user feedback
+- [ ] **Integration Checkpoint**: Desktop successfully uploads scan results to cloud
 
-### 5.2 Report Content **[desktop-gui-developer]**
-- [ ] Design executive summary format
-- [ ] Implement detailed findings with remediation steps
-- [ ] Add severity-based prioritization
-- [ ] Create affected entities listing
-- [ ] Include references and citations
-- [ ] Add compliance mapping (future consideration)
-- [ ] **Testing**: Verify report content reflects PowerShell rule findings and metadata
+## Phase 6: Advanced Analytics & Enterprise Features
+**🖥️ Development Environment: PRIMARY (Mac) - Advanced web features + database optimization**
 
-## Phase 6: CLI & Automation Support
+### 6.1 Analytics Engine **[webapp-coder-expert + supabase-integration-specialist]**
+- [ ] Implement historical trend calculation and storage
+- [ ] Create security score algorithms and benchmarking
+- [ ] Build risk correlation analysis between findings
+- [ ] Design compliance mapping and gap analysis
+- [ ] Create custom KPI tracking and alert system
+- [ ] **Integration Checkpoint**: Advanced analytics provide actionable insights
 
-### 6.1 Command Line Interface **[desktop-gui-developer]**
-- [ ] Implement headless execution mode
-- [ ] Create command-line parameter parsing
-- [ ] Add JSON-only output mode for automation
-- [ ] Implement batch scanning capabilities
-- [ ] Create configuration file support
-- [ ] **Integration Checkpoint**: CLI can execute all PowerShell rules and generate reports
+### 6.2 Enterprise Features **[webapp-coder-expert]**
+**🖥️ Development Environment: PRIMARY (Mac) - Advanced React + authentication integrations**
+- [ ] Implement SSO integration (SAML, OIDC) via Supabase Auth
+- [ ] Create advanced RBAC with custom permissions
+- [ ] Build custom branding and white-label options
+- [ ] Implement API access key management and quotas
+- [ ] Create advanced reporting with custom templates
+- [ ] **Integration Checkpoint**: Enterprise tier provides full-featured platform
 
-### 6.2 Integration Preparation **[desktop-gui-developer]**
-- [ ] Design API endpoint specifications (for future web app)
-- [ ] Create data models for external consumption
-- [ ] Implement client identification for partner matching
-- [ ] Add scan metadata for tracking and correlation
+## Phase 7: Testing & Quality Assurance
+**🖥️ Development Environment: PRIMARY (Mac) - API testing + E2E browser automation**
 
-## Phase 7: Testing & Validation
+### 7.1 Backend Testing **[testing-automation-specialist]**
+- [ ] Set up comprehensive testing framework for NestJS API
+- [ ] Create database testing with Supabase local development
+- [ ] Implement real-time subscription testing
+- [ ] Build performance testing for scan ingestion endpoints
+- [ ] Create security testing for authentication and authorization
+- [ ] **MUST use Playwright MCP for debugging test failures**
 
-### 7.1 Unit Testing **[desktop-gui-developer + powershell-security-rules-developer]**
-**C# Application Testing:**
-- [ ] Create test framework for security check modules
-- [ ] Implement mock AD/Graph data providers
-- [ ] Test risk scoring algorithms
-- [ ] Validate LDAP query generation
-- [ ] Test error handling and resilience patterns
+### 7.2 Frontend E2E Testing **[testing-automation-specialist]**
+**🖥️ Development Environment: PRIMARY (Mac) - Playwright browser automation**
+- [ ] Implement authentication flow testing across user types
+- [ ] Create dashboard functionality and real-time update testing
+- [ ] Build multi-tenant scenario testing
+- [ ] Test API integration with external services
+- [ ] Create responsive design and cross-browser testing
+- [ ] **MUST use Playwright MCP for all E2E test debugging**
 
-**PowerShell Rule Testing:**
-- [ ] Create PowerShell test framework for individual rules
-- [ ] Test rule execution in isolation
-- [ ] Validate rule metadata parsing
-- [ ] Test rule error handling
+### 7.3 Desktop Integration Testing **[testing-automation-specialist]**
+**🪟 Development Environment: SECONDARY (Windows) - Desktop app + PowerShell testing**
+- [ ] Test PowerShell rule execution and result processing
+- [ ] Validate API communication and authentication flows
+- [ ] Test offline scenarios and retry mechanisms
+- [ ] Create performance testing with large AD environments
+- [ ] Validate security and credential handling
+- [ ] **Integration Checkpoint**: End-to-end testing from desktop scan to dashboard display
 
-### 7.2 Integration Testing **[desktop-gui-developer]**
-- [ ] Test PowerShell rule execution through C# application
-- [ ] Test against various AD environments (different versions, sizes)
-- [ ] Validate Entra ID tenant variations
-- [ ] Test hybrid environment scenarios
-- [ ] Validate report generation across different data sets
-- [ ] Performance testing with large environments
-- [ ] **Integration Checkpoint**: End-to-end testing with all PowerShell rules
+## Phase 8: Deployment & Production
+**🖥️ Development Environment: PRIMARY (Mac) - Cloud deployment + DevOps**
 
-### 7.3 Security Testing **[desktop-gui-developer]**
-- [ ] Validate least privilege operation
-- [ ] Test credential handling and storage
-- [ ] Validate data encryption in transit and at rest
-- [ ] Test against malicious input scenarios
-- [ ] Audit logging and compliance verification
-- [ ] Validate PowerShell execution sandbox security
+### 8.1 Production Deployment **[webapp-coder-expert + api-integration-developer]**
+- [ ] Set up production Supabase instance with proper configuration
+- [ ] Deploy NestJS backend to Railway/Render with Docker
+- [ ] Configure Vercel deployment for Next.js frontend
+- [ ] Set up domain (ironveil.crimson7.io) and SSL certificates
+- [ ] Configure monitoring, logging, and error tracking
+- [ ] Implement backup and disaster recovery procedures
+- [ ] **Integration Checkpoint**: Production platform is live and operational
 
-## Phase 8: Deployment & Distribution
+### 8.2 Desktop Distribution **[desktop-gui-developer]**
+**🪟 Development Environment: SECONDARY (Windows) - .NET packaging + code signing**
+- [ ] Create single-file executable with embedded dependencies
+- [ ] Set up code signing for Windows executable
+- [ ] Create MSI installer for enterprise deployment
+- [ ] Implement auto-update mechanism for rules and application
+- [ ] Create installation and user onboarding documentation
+- [ ] **Integration Checkpoint**: Desktop scanner connects to production backend
 
-### 8.1 Packaging **[desktop-gui-developer]**
-- [ ] Create single-file executable build
-- [ ] Implement dependency bundling
-- [ ] Create installation documentation
-- [ ] Design user onboarding guide
-- [ ] Create troubleshooting documentation
-- [ ] Package PowerShell rules with executable
+## Phase 9: Documentation & Support
+**🖥️ Primary: Documentation sites | 🪟 Secondary: PowerShell + desktop guides**
 
-### 8.2 Documentation **[desktop-gui-developer + powershell-security-rules-developer]**
-- [ ] Write administrator guide
-- [ ] Create technical reference documentation for PowerShell rules
-- [ ] Document API specifications for future expansion
-- [ ] Create partner integration guide
+### 9.1 Comprehensive Documentation **[all agents]**
+- [ ] Create user guides for both desktop and web applications
+- [ ] Write administrator deployment and configuration guides
+- [ ] Document PowerShell security rules and customization options
+- [ ] Create EASM provider integration guides and API documentation
+- [ ] Build troubleshooting and support documentation
 - [ ] Write security and compliance documentation
 
-## Phase 9: Future Preparation
+### 9.2 Business Operations **[webapp-coder-expert]**
+**🖥️ Development Environment: PRIMARY (Mac) - Web platform integrations**
+- [ ] Implement subscription and billing system integration
+- [ ] Create usage analytics and customer success metrics
+- [ ] Build customer support ticketing system integration
+- [ ] Implement feature flagging for tier-based access control
+- [ ] Create customer onboarding and trial workflows
 
-### 9.1 Web Application Foundation **[webapp-coder-expert + db-expert]**
-- [ ] Design database schema for PostgreSQL integration
-- [ ] Create API endpoint specifications
-- [ ] Design multi-tenant architecture
-- [ ] Plan authentication and authorization framework
-- [ ] Create data migration utilities from desktop exports
+## Phase 10: Platform Evolution & Scaling
+**🖥️ Development Environment: PRIMARY (Mac) - Advanced cloud platform features**
 
-### 9.2 Continuous Monitoring Preparation **[webapp-coder-expert + db-expert]**
-- [ ] Design scheduled scanning framework
-- [ ] Create change notification system
-- [ ] Plan alerting and notification infrastructure
-- [ ] Design trend analysis database schema
-- [ ] Create audit trail and compliance reporting
+### 10.1 Advanced Integrations **[api-integration-developer]**
+- [ ] Build marketplace for third-party security rule contributions
+- [ ] Create advanced webhook system for real-time security events
+- [ ] Implement federated identity for large enterprise deployments
+- [ ] Build advanced compliance frameworks (SOC 2, ISO 27001)
+- [ ] Create AI-powered security insights and recommendations
+
+### 10.2 Platform Scaling **[supabase-integration-specialist + webapp-coder-expert]**
+**🖥️ Development Environment: PRIMARY (Mac) - Database scaling + performance optimization**
+- [ ] Implement database sharding for large-scale deployments
+- [ ] Create advanced caching and performance optimization
+- [ ] Build regional deployment capabilities
+- [ ] Implement advanced analytics and business intelligence
+- [ ] Create partner program and reseller portal
 
 ## Development Guidelines
 
 ### Development Environment Setup
-**Current Phase: Native Windows Development**
-- Primary development on Windows 11 (via RDP lab or miniPC)
-- Visual Studio 2022 or VS Code with C# extensions
-- PowerShell ISE or VS Code for rule development
-- Windows SDK for WPF development
-- Git for version control
+**Development Environment Distribution:**
 
-### Subagent Collaboration Workflow
-1. **powershell-security-rules-developer**: Creates rules in `/indicators` folder first
-2. **desktop-gui-developer**: Implements C# application to execute and integrate rules
-3. **Integration Testing**: Both agents validate rule execution and result processing
-4. **Iteration**: Rules refined based on desktop application testing feedback
+**🖥️ PRIMARY (Mac) - Cloud Platform Development:**
+- **Backend API**: Node.js + NestJS + TypeScript development
+- **Frontend**: React 18 + Next.js 14 + TailwindCSS + shadcn/ui
+- **Database**: Supabase PostgreSQL with local development setup
+- **Testing**: Playwright MCP for E2E testing and browser automation
+- **Deployment**: Vercel for frontend, Railway/Render for backend
+- **Documentation**: Context7 MCP for latest framework documentation
+
+**🪟 SECONDARY (Windows 11) - Desktop + PowerShell Development:**
+- **Desktop App**: Visual Studio 2022 for .NET 8 WPF development
+- **PowerShell Rules**: PowerShell ISE/VS Code for security rule development
+- **AD/Entra Testing**: Direct access to Windows domain environments
+- **Native Integration**: System.DirectoryServices + Microsoft.Graph SDK
+- **Package Distribution**: MSI creation + code signing for enterprise deployment
+
+### Agent Collaboration Workflow (Hybrid Architecture)
+1. **supabase-integration-specialist**: Creates database schema and real-time subscriptions
+2. **api-integration-developer**: Builds NestJS API with authentication and rate limiting
+3. **webapp-coder-expert**: Develops Next.js frontend with dashboard and user management
+4. **desktop-gui-developer**: Creates minimal WPF scanner that uploads to cloud backend
+5. **powershell-security-rules-developer**: Develops standardized security rules for desktop execution
+6. **testing-automation-specialist**: Creates comprehensive testing using Playwright MCP for debugging
+
+### Integration Checkpoints
+- **Phase 1**: Backend API can receive and process scan data
+- **Phase 2**: Desktop scanner authenticates and uploads successfully
+- **Phase 3**: PowerShell rules output standardized JSON format
+- **Phase 4**: Real-time dashboard updates from desktop scans
+- **Phase 6**: End-to-end workflow: scan → upload → dashboard → insights
 
 ### Code Standards
 - Follow secure coding practices
@@ -249,7 +288,11 @@
 - Use async/await patterns for I/O operations
 - Follow dependency injection patterns
 - Maintain separation of concerns between UI, business logic, and data access
-- PowerShell rules must follow standardized output format for C# consumption
+- PowerShell rules must follow standardized JSON format for API consumption
+- All components must follow API-first design for EASM integration
+- Multi-tenant architecture with proper data isolation (RLS)
+- Real-time updates using WebSocket and Supabase subscriptions
+- MCP integration: Context7 for documentation, Playwright for debugging
 
 ### Security Requirements
 - Operate with principle of least privilege
@@ -257,11 +300,14 @@
 - Encrypt all data in transit and at rest
 - Implement secure authentication mechanisms
 - Follow OWASP secure coding guidelines
-- Secure PowerShell execution sandboxing
+- Secure PowerShell execution sandboxing in desktop application
+- API authentication and rate limiting for external integrations
+- Multi-tenant data isolation using Supabase Row Level Security
+- Secure credential handling between desktop and cloud backend
 
 ### Performance Targets
-- Complete full scan of 10K users/5K computers within 30 minutes
-- Support environments up to 100K objects
-- Minimal impact on domain controller performance
-- Memory usage optimization for large result sets
-- Responsive UI during long-running operations
+- Desktop scanner: Complete full scan of 10K users/5K computers within 30 minutes
+- Cloud backend: Handle concurrent scan uploads from multiple organizations
+- Real-time dashboard: Update within 5 seconds of scan completion
+- API performance: Handle EASM provider bulk exports with pagination
+- Database performance: Optimized queries with proper indexing and RLS

@@ -4,35 +4,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-IronVeil is an Identity Security Scanner application that identifies and assesses common identity security misconfigurations and threats within both on-premises Active Directory (AD) and Microsoft Entra ID environments. The current phase focuses on developing a standalone Windows desktop application.
+IronVeil is a **MicroSaaS Identity Security Platform** that provides hybrid architecture combining a minimal desktop scanner with a full-featured cloud backend. The platform identifies and assesses identity security misconfigurations and threats within both on-premises Active Directory (AD) and Microsoft Entra ID environments, delivering insights through a real-time web dashboard at **ironveil.crimson7.io**.
 
-## Architecture
+## Hybrid MicroSaaS Architecture
 
-### Core Components
-- **Scan Engine**: Orchestrates data collection from AD and Entra ID, applies security indicator checks, generates findings
-- **Data Collection Modules**:
-  - **Active Directory Collector**: Uses LDAP queries, PowerShell cmdlets (ActiveDirectory module), WMI
-  - **Entra ID Collector**: Leverages Microsoft Graph API, Azure AD PowerShell cmdlets
-- **Security Analyzer**: Processes data against predefined security indicators (rules in `/indicators` folder)
-- **Reporting Module**: Generates reports (PDF, HTML) and machine-readable outputs (CSV, JSON)
-- **User Interface**: Simple WPF-based GUI for initiating scans and viewing results
+### System Components
 
-### Technology Stack (Desktop App)
-- **Core Language**: C# (.NET 8)
-- **UI Framework**: WPF (Windows Presentation Foundation)
-- **AD Integration**: System.DirectoryServices for LDAP queries
-- **PowerShell Integration**: System.Management.Automation for cmdlet execution
-- **Graph API**: Microsoft Graph SDK for Entra ID queries
-- **Reporting**: QuestPDF for PDF generation, OxyPlot/LiveCharts for visualizations
-- **CLI Support**: System.CommandLine for headless execution
-- **Packaging**: Single-file .exe using .NET Publish
+**1. Minimal Desktop Scanner (Windows)**
+- **Framework**: .NET 8 WPF with minimal UI
+- **PowerShell Engine**: System.Management.Automation for rule execution
+- **Authentication**: OAuth 2.0 PKCE for cloud backend access
+- **API Client**: Secure upload of scan results to cloud platform
+- **Core Function**: Execute PowerShell security rules and upload results
 
-### Data Flow
-1. User initiates scan via UI (typically local environment with current user rights)
-2. Authentication to AD (local credentials) and Entra ID (OAuth 2.0/service principal)
-3. Data collection from domain controllers and Microsoft Graph API endpoints
-4. Security analysis using rule engine from `/indicators` folder
-5. Report generation and dashboard population
+**2. Cloud Backend Platform (ironveil.crimson7.io)**
+- **Database**: Supabase (PostgreSQL) with Row Level Security (RLS)
+- **Backend API**: NestJS with TypeScript, RESTful endpoints
+- **Frontend**: Next.js 14 + React 18 + TailwindCSS + shadcn/ui
+- **Authentication**: Supabase Auth with JWT tokens
+- **Real-time**: WebSocket subscriptions for live dashboard updates
+- **Integration**: EASM provider connectors and third-party APIs
+
+**3. Business Model**
+- **Community Edition**: Basic scanning and dashboard (ironveil.crimson7.io)
+- **Enterprise Edition**: Advanced analytics, SSO, custom branding
+- **EASM Integration**: API access for third-party security platforms
+
+### Technology Stack
+
+**Desktop Application**:
+- **.NET 8 WPF**: Minimal scanner interface
+- **PowerShell Engine**: System.Management.Automation
+- **AD/Entra Integration**: System.DirectoryServices, Microsoft.Graph SDK
+- **API Communication**: HttpClient with OAuth 2.0 PKCE
+
+**Cloud Platform**:
+- **Database**: Supabase PostgreSQL with RLS policies
+- **Backend**: NestJS + TypeScript + Express
+- **Frontend**: Next.js 14 + React 18 + TypeScript
+- **UI Components**: TailwindCSS + shadcn/ui
+- **Real-time**: Supabase subscriptions and WebSocket
+- **Authentication**: Supabase Auth with JWT
+- **Deployment**: Vercel (frontend), Railway/Render (backend)
+
+### Hybrid Data Flow
+1. **Desktop Scanner**: User launches minimal WPF application
+2. **Backend Selection**: Choose community (ironveil.crimson7.io) or enterprise backend
+3. **Authentication**: OAuth 2.0 PKCE flow to authenticate with cloud platform
+4. **Local Scanning**: PowerShell rules execute against AD/Entra ID from `/indicators` folder
+5. **Secure Upload**: JSON results uploaded to cloud backend via authenticated API
+6. **Real-time Processing**: Backend processes scan data and updates dashboard
+7. **Live Dashboard**: Users view comprehensive results through web interface
+8. **EASM Integration**: Third-party platforms consume data via RESTful APIs
 
 ## Development Structure
 
@@ -45,11 +68,19 @@ IronVeil is an Identity Security Scanner application that identifies and assesse
 - `Identity Security Indicators (checks).md` - Detailed list of security indicators
 
 ### Specialized Agents
-The project is designed to work with specialized subagents:
-1. **powershell-security-rules-developer**: Develops PowerShell-based security check rules in `/indicators` folder following patterns in `implementation-patterns.md` and `security-check-pseudocode.md`. Creates rules that interface with the C# desktop application through standardized PowerShell cmdlet execution.
-2. **desktop-gui-developer**: Handles all WPF desktop application development including UI design, C#/.NET backend, LDAP/Graph API integration, rule engine that executes PowerShell scripts, and report generation.
-3. **webapp-coder-expert**: For future web application (later phase)
-4. **db-expert**: For PostgreSQL integration (later phase)
+The project uses six specialized agents with defined responsibilities:
+
+1. **powershell-security-rules-developer**: Develops PowerShell security check rules in `/indicators` folder with standardized JSON output format for API consumption.
+
+2. **desktop-gui-developer**: Creates minimal WPF scanner with PowerShell engine integration, secure API communication, and OAuth 2.0 PKCE authentication.
+
+3. **supabase-integration-specialist**: Designs database schema, RLS policies, real-time subscriptions, and Supabase authentication. **MUST use Context7 MCP** for latest Supabase documentation.
+
+4. **webapp-coder-expert**: Develops Next.js frontend with real-time dashboard, multi-tenant architecture, and responsive design. **MUST use Context7 MCP** for latest Next.js, React, and TailwindCSS documentation.
+
+5. **api-integration-developer**: Builds NestJS backend with RESTful APIs, EASM provider connectors, webhook systems, and OpenAPI documentation.
+
+6. **testing-automation-specialist**: Creates comprehensive testing framework with E2E, API, and integration tests. **MUST use Playwright MCP** for debugging all test failures.
 
 ## Security Implementation Patterns
 
@@ -73,20 +104,49 @@ The project is designed to work with specialized subagents:
 ## Common Development Tasks
 
 ### Development Environment Setup
-**Platform**: Native Windows Development (Windows 11)
-**IDE Options**:
-- Visual Studio 2022 (recommended for WPF development and debugging)
-- VS Code with C# Dev Kit extension (alternative)
-- PowerShell ISE or VS Code for PowerShell rule development
+**Hybrid Development Environment**:
 
-### Build and Test Commands
-Currently no build system is set up. The desktop-gui-developer should establish:
-- `dotnet build` - Build the solution
-- `dotnet test` - Run unit tests  
-- `dotnet run` - Run application for debugging
-- `dotnet publish -r win-x64 --self-contained --single-file` - Create single-file executable
-- PowerShell test framework for validating security rules
-- `Test-SecurityRule -RuleName "RuleName"` - Test individual PowerShell rules
+**Desktop Development (Windows 11)**:
+- Visual Studio 2022 for .NET 8 WPF development
+- PowerShell 7 for rule development and testing
+- Git for version control
+
+**Cloud Development**:
+- Node.js 18+ for NestJS and Next.js development
+- Supabase CLI for local database development
+- VS Code with TypeScript, React, and Tailwind extensions
+- Docker for local development and testing
+
+**MCP Integration**:
+- **Context7 MCP**: For retrieving latest documentation (Supabase, Next.js, React, TailwindCSS)
+- **Playwright MCP**: For debugging E2E test failures and browser automation
+- **Supabase MCP**: For direct database operations and management
+
+### Build and Development Commands
+
+**Desktop Application (.NET 8)**:
+- `dotnet build` - Build WPF application
+- `dotnet test` - Run unit tests
+- `dotnet run` - Run desktop scanner for debugging
+- `dotnet publish -r win-x64 --self-contained --single-file` - Create executable
+
+**Cloud Backend (NestJS + Supabase)**:
+- `npm run dev` - Start NestJS development server
+- `npm run build` - Build production backend
+- `npm test` - Run API tests
+- `supabase start` - Start local Supabase instance
+- `supabase db push` - Apply database migrations
+- `supabase gen types typescript` - Generate TypeScript types
+
+**Frontend (Next.js)**:
+- `npm run dev` - Start Next.js development server
+- `npm run build` - Build production frontend
+- `npm run test` - Run React component tests
+- `npm run test:e2e` - Run Playwright E2E tests
+
+**PowerShell Rules**:
+- `Test-SecurityRule -RuleName "RuleName"` - Test individual rules
+- `Invoke-Pester` - Run PowerShell test framework
 
 ### Debugging and Development
 **Visual Studio 2022 Setup:**
@@ -101,18 +161,24 @@ Currently no build system is set up. The desktop-gui-developer should establish:
 - Use `Write-Debug` and `Write-Verbose` for rule debugging
 - Validate LDAP query syntax with real AD environment
 
-### Subagent Workflow
-1. **powershell-security-rules-developer** creates security rules in `/indicators` folder:
-   - Follow patterns from `implementation-patterns.md` and `security-check-pseudocode.md`
-   - Create standardized PowerShell scripts with proper metadata
-   - Ensure rules can be executed by C# application through System.Management.Automation
-   - Test rules independently before integration
+### Agent Collaboration Workflow
 
-2. **desktop-gui-developer** builds the desktop application:
-   - Implement rule engine that can load and execute PowerShell scripts from `/indicators`
-   - Create WPF UI following the technology stack specifications
-   - Integrate LDAP queries and Microsoft Graph API calls
-   - Implement report generation in multiple formats
+**Phase 1: Backend Foundation**
+1. **supabase-integration-specialist**: Create database schema with RLS policies
+2. **api-integration-developer**: Build NestJS API with authentication
+3. **webapp-coder-expert**: Develop Next.js dashboard with real-time updates
+
+**Phase 2: Desktop Integration** 
+4. **desktop-gui-developer**: Create minimal WPF scanner with API integration
+5. **powershell-security-rules-developer**: Develop standardized security rules
+6. **testing-automation-specialist**: Create comprehensive test coverage
+
+**Integration Checkpoints**:
+- Backend API can receive and process scan uploads
+- Desktop scanner authenticates and uploads successfully 
+- PowerShell rules output standardized JSON format
+- Real-time dashboard updates from scan results
+- End-to-end workflow: scan → upload → dashboard → insights
 
 ### Integration Requirements
 
@@ -141,47 +207,90 @@ Brief rule description
 #>
 ```
 
-**Required Output Format:**
+**Required JSON Output Format for Cloud API:**
 ```powershell
-# Rules must return standardized objects
+# Rules must return JSON-serializable objects for API upload
 return @{
     CheckId = "rule-identifier"
-    Timestamp = Get-Date
+    Timestamp = (Get-Date).ToString("o")  # ISO 8601 format
     Status = "Success|Failed|Error"  
     Score = 75
+    Severity = "Critical|High|Medium|Low"
+    Category = "PrivilegedAccess|Authentication|Authorization"
     Findings = @(
         @{
             ObjectName = "affected-object"
+            ObjectType = "User|Group|Computer|Application"
             RiskLevel = "High"
             Description = "issue description" 
             Remediation = "fix instructions"
+            AffectedAttributes = @("userAccountControl", "memberOf")
         }
     )
     Message = "Summary message"
     AffectedObjects = 5
     IgnoredObjects = 2
+    Metadata = @{
+        Domain = "contoso.com"
+        TenantId = "guid-if-entra-id"
+        ExecutionTime = 1.5  # seconds
+    }
 }
 ```
 
 **Error Handling Requirements:**
-- Consistent try/catch blocks with standardized error objects
-- Graceful degradation for permission issues
-- Timeout handling for long-running queries
-- All security rules must be testable both independently and through the desktop application
+- Consistent try/catch blocks with JSON-serializable error objects
+- Graceful degradation for permission issues with detailed logging
+- Timeout handling for long-running queries (max 30 seconds per rule)
+- Network error handling for cloud API communication
+- All security rules must be testable independently and through desktop application
+- API error responses must include correlation IDs for debugging
 
-When working on this project:
-- Focus on the desktop application (current phase)
-- Security rules should be developed in the `/indicators` folder by powershell-security-rules-developer
-- Follow the implementation patterns documented in the indicators directory
-- Use the pseudocode templates for consistent security check implementation
-- Ensure all code adheres to security best practices for identity assessment tools
-- Reports should be generated in multiple formats (JSON for partner integration, PDF/HTML for human consumption)
+## MCP Integration Requirements
 
-## Project Goals
+**Context7 MCP Usage (MANDATORY):**
+- **supabase-integration-specialist**: Must use Context7 MCP for latest Supabase features, RLS policies, real-time subscriptions
+- **webapp-coder-expert**: Must use Context7 MCP for Next.js 14, React 18, TailwindCSS, shadcn/ui documentation
 
-The primary goal is to provide an Identity Attack Surface overview through:
-- Comprehensive dashboard or exportable JSON for external systems
-- Detection of Indicators of Exposure (IoEs) and Indicators of Compromise (IoCs)
-- Risk assessment and remediation guidance
-- Support for both on-premises AD and cloud Entra ID environments
-- Future API support for partner integrations (web application phase)
+**Playwright MCP Usage (MANDATORY):**
+- **testing-automation-specialist**: Must use Playwright MCP for debugging all E2E test failures, browser automation issues
+
+## Development Guidelines
+
+**Hybrid Architecture Focus:**
+- Desktop application: Minimal UI, secure API integration, PowerShell engine
+- Cloud platform: Full-featured dashboard, real-time updates, multi-tenant architecture
+- API-first design: Enable EASM provider integrations and third-party platforms
+- Security: Multi-tenant data isolation, secure authentication, encrypted communication
+
+**PowerShell Rules:**
+- Develop in `/indicators` folder with standardized JSON output
+- Follow implementation patterns for consistent structure
+- Ensure rules work with both desktop execution and cloud processing
+- All output must be JSON-serializable for API consumption
+
+**Quality Standards:**
+- Real-time dashboard updates within 5 seconds of scan completion
+- Multi-tenant data isolation using Supabase RLS policies
+- Comprehensive E2E testing with Playwright MCP debugging
+- API documentation with OpenAPI 3.0 specifications
+
+## MicroSaaS Platform Goals
+
+**Primary Objectives:**
+- **Hybrid Architecture**: Minimal desktop scanner + full cloud backend
+- **Real-time Insights**: Live dashboard with WebSocket updates at ironveil.crimson7.io
+- **Multi-tenant SaaS**: Community, Enterprise, and EASM integration tiers
+- **API-first Design**: Enable third-party EASM provider integrations
+- **Comprehensive Coverage**: Both AD and Entra ID security assessment
+
+**Business Model:**
+- **Community**: Basic scanning and dashboard access
+- **Enterprise**: Advanced analytics, SSO, custom branding, multi-user
+- **EASM Integration**: API access for security platforms and service providers
+
+**Technical Excellence:**
+- Real-time dashboard updates using Supabase subscriptions
+- Secure multi-tenant architecture with Row Level Security
+- Comprehensive API documentation for partner integrations
+- Modern tech stack with TypeScript, React, and cloud-native deployment
