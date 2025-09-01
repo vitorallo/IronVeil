@@ -165,37 +165,67 @@ try {
     $adPrivilegedUsers = @{}
     
     if ($DomainName) {
-        # Import AD module
-        Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+        # Import ADSI Helper
+        $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+        if (Test-Path $helperPath) {
+            . $helperPath
+        }
+        else {
+            throw "IronVeil-ADSIHelper.ps1 not found at: $helperPath"
+        }
         
-        if (Get-Module ActiveDirectory) {
-            # Get domain information
-            $domain = Get-ADDomain -Identity $DomainName -ErrorAction SilentlyContinue
+        # Get domain information using ADSI
+        try {
+            $domainInfo = Get-IVDomainInfo -DomainName $DomainName
             
-            if ($domain) {
+            if ($domainInfo) {
                 foreach ($groupName in $privilegedADGroups) {
                     try {
-                        # Get group members
-                        $group = Get-ADGroup -Filter "Name -eq '$groupName'" -Server $DomainName -ErrorAction SilentlyContinue
+                        # Search for the group using ADSI
+                        $groupFilter = "(&(objectClass=group)(sAMAccountName=$groupName))"
+                        $groups = Search-IVADObjects -Filter $groupFilter -Properties @('distinguishedName', 'sAMAccountName')
                         
-                        if ($group) {
-                            $members = Get-ADGroupMember -Identity $group -Recursive -Server $DomainName -ErrorAction SilentlyContinue
+                        if ($groups -and $groups.Count -gt 0) {
+                            $group = $groups[0]
+                            
+                            # Get group members recursively using ADSI
+                            $members = Get-IVADGroupMember -Identity $group.sAMAccountName -Recursive
                             
                             foreach ($member in $members) {
-                                if ($member.objectClass -eq "user") {
-                                    # Get user details
-                                    $adUser = Get-ADUser -Identity $member -Properties SamAccountName,DisplayName,UserPrincipalName,Enabled,whenCreated,memberOf -Server $DomainName -ErrorAction SilentlyContinue
+                                if ($member.ObjectClass -eq "user") {
+                                    # Get full user details using ADSI
+                                    $userFilter = "(&(objectClass=user)(sAMAccountName=$($member.SamAccountName)))"
+                                    $users = Search-IVADObjects -Filter $userFilter -Properties @('sAMAccountName', 'displayName', 'userPrincipalName', 'userAccountControl', 'whenCreated', 'memberOf')
                                     
-                                    if ($adUser) {
-                                        $userKey = $adUser.SamAccountName.ToLower()
+                                    if ($users -and $users.Count -gt 0) {
+                                        $adUser = $users[0]
+                                        
+                                        # Check if account is enabled using UserAccountControl
+                                        $isEnabled = $false
+                                        if ($adUser.userAccountControl) {
+                                            $uac = if ($adUser.userAccountControl -is [Array]) { 
+                                                $adUser.userAccountControl[0] 
+                                            } else { 
+                                                $adUser.userAccountControl 
+                                            }
+                                            $isEnabled = -not (Test-IVUserAccountControl -UAC $uac -Flag 'ACCOUNTDISABLE')
+                                        }
+                                        
+                                        $userKey = $adUser.sAMAccountName.ToLower()
                                         
                                         if (-not $adPrivilegedUsers.ContainsKey($userKey)) {
                                             $adPrivilegedUsers[$userKey] = @{
-                                                SamAccountName = $adUser.SamAccountName
-                                                DisplayName = $adUser.DisplayName
-                                                UserPrincipalName = $adUser.UserPrincipalName
-                                                Enabled = $adUser.Enabled
-                                                WhenCreated = $adUser.whenCreated
+                                                SamAccountName = $adUser.sAMAccountName
+                                                DisplayName = if ($adUser.displayName) { 
+                                                    if ($adUser.displayName -is [Array]) { $adUser.displayName[0] } else { $adUser.displayName }
+                                                } else { $adUser.sAMAccountName }
+                                                UserPrincipalName = if ($adUser.userPrincipalName) { 
+                                                    if ($adUser.userPrincipalName -is [Array]) { $adUser.userPrincipalName[0] } else { $adUser.userPrincipalName }
+                                                } else { $null }
+                                                Enabled = $isEnabled
+                                                WhenCreated = if ($adUser.whenCreated) {
+                                                    if ($adUser.whenCreated -is [Array]) { $adUser.whenCreated[0] } else { $adUser.whenCreated }
+                                                } else { $null }
                                                 ADGroups = @()
                                             }
                                         }
@@ -213,6 +243,9 @@ try {
                     }
                 }
             }
+        }
+        catch {
+            # If ADSI operations fail, continue with what we have
         }
     }
     

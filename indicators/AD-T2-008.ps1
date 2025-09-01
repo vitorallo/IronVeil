@@ -25,16 +25,16 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Import IronVeil ADSI Helper
+    . "$PSScriptRoot\IronVeil-ADSIHelper.ps1"
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
     # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
     
     # Define password age thresholds (in days)
     $criticalThreshold = 365 * 2  # 2 years - critical risk
@@ -43,16 +43,16 @@ try {
     $recommendedRotation = 180    # Microsoft recommends 180 days
     
     # Get all KRBTGT accounts (including Read-Only Domain Controller KRBTGT accounts)
-    $krbtgtAccounts = Get-ADUser -Filter {SamAccountName -like "krbtgt*"} `
-                                 -Properties passwordLastSet, whenCreated, whenChanged, enabled, `
-                                            lastLogonDate, description, pwdLastSet -Server $DomainName
+    $krbtgtAccounts = Get-IVADUser -Filter "(sAMAccountName=krbtgt*)" `
+                                   -Properties @('pwdLastSet', 'whenCreated', 'whenChanged', 'userAccountControl',
+                                               'lastLogonTimestamp', 'description')
     
     if ($krbtgtAccounts.Count -eq 0) {
         throw "Unable to find KRBTGT account(s) in domain $DomainName"
     }
     
     foreach ($krbtgt in $krbtgtAccounts) {
-        $accountName = $krbtgt.SamAccountName
+        $accountName = $krbtgt.sAMAccountName
         $isMainKrbtgt = ($accountName -eq "krbtgt")
         $accountType = if ($isMainKrbtgt) { "Primary KRBTGT" } else { "RODC KRBTGT" }
         
@@ -62,17 +62,18 @@ try {
         
         if ($krbtgt.pwdLastSet) {
             # Convert from FileTime to DateTime
-            $passwordLastSetDate = [DateTime]::FromFileTime($krbtgt.pwdLastSet)
-            $passwordAge = ((Get-Date) - $passwordLastSetDate).Days
-        }
-        elseif ($krbtgt.passwordLastSet) {
-            $passwordLastSetDate = $krbtgt.passwordLastSet
+            $passwordLastSetDate = [DateTime]::FromFileTime([long]$krbtgt.pwdLastSet)
             $passwordAge = ((Get-Date) - $passwordLastSetDate).Days
         }
         else {
             # If no password last set date, use account creation date as fallback
             if ($krbtgt.whenCreated) {
-                $passwordLastSetDate = $krbtgt.whenCreated
+                $whenCreatedTime = if ($krbtgt.whenCreated -is [DateTime]) { 
+                    $krbtgt.whenCreated 
+                } else { 
+                    [DateTime]::Parse($krbtgt.whenCreated) 
+                }
+                $passwordLastSetDate = $whenCreatedTime
                 $passwordAge = ((Get-Date) - $passwordLastSetDate).Days
             }
         }
@@ -114,22 +115,26 @@ try {
         # Additional checks for the primary KRBTGT account
         if ($isMainKrbtgt) {
             # Check if account is disabled (it should be)
-            if ($krbtgt.enabled -eq $true) {
+            $uac = [int]$krbtgt.userAccountControl
+            $isEnabled = -not ($uac -band 0x2)  # ACCOUNTDISABLE flag
+            
+            if ($isEnabled) {
                 $riskLevel = "Critical"
                 $riskFactors += "KRBTGT account is ENABLED - this should NEVER happen!"
             }
             
             # Check for any last logon (KRBTGT should never log on)
-            if ($krbtgt.lastLogonDate) {
+            if ($krbtgt.lastLogonTimestamp) {
+                $lastLogonTime = [DateTime]::FromFileTime([long]$krbtgt.lastLogonTimestamp)
+                $daysSinceLogon = ((Get-Date) - $lastLogonTime).Days
                 $riskLevel = "Critical"
-                $daysSinceLogon = ((Get-Date) - $krbtgt.lastLogonDate).Days
                 $riskFactors += "KRBTGT has a last logon date ($daysSinceLogon days ago) - highly suspicious!"
             }
         }
         
         # Check domain functional level for additional context
-        $domainMode = $domain.DomainMode
-        if ($domainMode -lt "Windows2012R2Domain" -and $passwordAge -gt $highThreshold) {
+        $domainMode = $domainInfo.DomainMode
+        if ($domainMode -and $domainMode -lt "2012R2" -and $passwordAge -gt $highThreshold) {
             $riskFactors += "Legacy domain functional level ($domainMode) increases risk"
         }
         
@@ -180,7 +185,7 @@ try {
     }
     
     # Check for multiple KRBTGT accounts (RODCs)
-    $rodcKrbtgtCount = @($krbtgtAccounts | Where-Object { $_.SamAccountName -ne "krbtgt" }).Count
+    $rodcKrbtgtCount = @($krbtgtAccounts | Where-Object { $_.sAMAccountName -ne "krbtgt" }).Count
     if ($rodcKrbtgtCount -gt 0) {
         # This is informational, not necessarily a finding
         $rodcInfo = "Domain has $rodcKrbtgtCount Read-Only Domain Controller KRBTGT account(s). Each RODC has its own KRBTGT account for security isolation."
@@ -226,9 +231,9 @@ try {
     }
     else {
         # Get the actual age even if it's within threshold
-        $mainKrbtgt = $krbtgtAccounts | Where-Object { $_.SamAccountName -eq "krbtgt" } | Select-Object -First 1
+        $mainKrbtgt = $krbtgtAccounts | Where-Object { $_.sAMAccountName -eq "krbtgt" } | Select-Object -First 1
         if ($mainKrbtgt -and $mainKrbtgt.pwdLastSet) {
-            $currentAge = ((Get-Date) - [DateTime]::FromFileTime($mainKrbtgt.pwdLastSet)).Days
+            $currentAge = ((Get-Date) - [DateTime]::FromFileTime([long]$mainKrbtgt.pwdLastSet)).Days
             $message = "Excellent! KRBTGT password is only $currentAge days old, well within the recommended 180-day rotation period."
         }
         else {
@@ -252,7 +257,6 @@ try {
             ExecutionTime = [Math]::Round($executionTime, 2)
             KRBTGTAccountsFound = $krbtgtAccounts.Count
             RODCKRBTGTAccounts = $rodcKrbtgtCount
-            DomainFunctionalLevel = $domainMode.ToString()
             RecommendedRotationDays = $recommendedRotation
         }
     }

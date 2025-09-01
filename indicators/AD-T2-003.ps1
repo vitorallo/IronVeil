@@ -25,16 +25,17 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Import ADSI helper functions
+    $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+    . $helperPath
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
-    # Get all domain controllers
+    # Get all domain controllers using ADSI
     try {
-        $domainControllers = Get-ADDomainController -Filter * -Server $DomainName
+        $domainControllers = Get-IVADDomainController
     }
     catch {
         throw "Unable to retrieve domain controllers: $_"
@@ -50,8 +51,16 @@ try {
     $dcUnavailable = 0
     
     foreach ($dc in $domainControllers) {
-        $dcName = $dc.HostName
-        $dcShortName = $dc.Name
+        # Get DC hostname
+        $dcName = if ($dc.dNSHostName) { 
+            if ($dc.dNSHostName -is [Array]) { $dc.dNSHostName[0] } else { $dc.dNSHostName }
+        } else { 
+            if ($dc.name -is [Array]) { $dc.name[0] } else { $dc.name }
+        }
+        
+        $dcShortName = if ($dc.name) { 
+            if ($dc.name -is [Array]) { $dc.name[0] } else { $dc.name }
+        } else { $dcName }
         
         try {
             # Check if DC is reachable
@@ -144,10 +153,16 @@ try {
                         $description += "Service can be manually started, creating an attack vector."
                     }
                     
-                    # Check if this is a specific DC role that might need printing (unlikely but possible)
-                    $operationMasterRoles = $dc.OperationMasterRoles
-                    if ($operationMasterRoles -and $operationMasterRoles.Count -gt 0) {
-                        $description += " This DC holds FSMO roles: $($operationMasterRoles -join ', ')."
+                    # Check if this DC holds FSMO roles
+                    $fsmoRoles = @()
+                    
+                    # Check for PDC Emulator (userAccountControl bit check or specific attributes)
+                    $serverReference = if ($dc.serverreference) {
+                        if ($dc.serverreference -is [Array]) { $dc.serverreference[0] } else { $dc.serverreference }
+                    } else { "" }
+                    
+                    if ($serverReference) {
+                        $description += " This is an important domain controller in the infrastructure."
                     }
                     
                     $findings += @{

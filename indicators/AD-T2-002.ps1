@@ -25,25 +25,23 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Import ADSI helper functions
+    $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+    . $helperPath
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
-    # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
-    $configDN = "CN=Configuration,$domainDN"
+    # Get domain information using ADSI
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
+    $configDN = $domainInfo.ConfigurationNamingContext
     
-    # Get all certificate templates
-    $templateContainer = "CN=Certificate Templates,CN=Public Key Services,CN=Services,$configDN"
+    # Get all certificate templates using ADSI
+    $templates = Get-IVCertificateTemplates -ConfigurationDN $configDN
     
-    try {
-        $templates = Get-ADObject -SearchBase $templateContainer -Filter {objectClass -eq "pKICertificateTemplate"} -Properties *
-    }
-    catch {
+    if ($templates.Count -eq 0) {
         # Certificate Services might not be installed
         return @{
             CheckId = "AD-T2-002"
@@ -83,12 +81,22 @@ try {
     $NO_SECURITY_EXTENSION = 0x00080000
     
     foreach ($template in $templates) {
-        $templateName = $template.Name
+        $templateName = if ($template.cn) { 
+            if ($template.cn -is [Array]) { $template.cn[0] } else { $template.cn }
+        } else { "Unknown" }
+        
         $issues = @()
         $riskLevel = "Low"
         
         # Check 1: Can enrollee supply subject?
-        $nameFlag = $template.'msPKI-Certificate-Name-Flag'
+        $nameFlag = if ($template.'mspki-certificate-name-flag') {
+            if ($template.'mspki-certificate-name-flag' -is [Array]) { 
+                $template.'mspki-certificate-name-flag'[0] 
+            } else { 
+                $template.'mspki-certificate-name-flag' 
+            }
+        } else { 0 }
+        
         if ($nameFlag) {
             if ($nameFlag -band $ENROLLEE_SUPPLIES_SUBJECT) {
                 $issues += "Enrollee can supply subject name (ESC1 vulnerability)"
@@ -101,7 +109,14 @@ try {
         }
         
         # Check 2: Does template have dangerous EKU?
-        $ekus = $template.'pKIExtendedKeyUsage'
+        $ekus = if ($template.'pkiextendedkeyusage') {
+            if ($template.'pkiextendedkeyusage' -is [Array]) { 
+                $template.'pkiextendedkeyusage'
+            } else { 
+                @($template.'pkiextendedkeyusage')
+            }
+        } else { @() }
+        
         $dangerousEKUs = @(
             "2.5.29.37.0",  # Any Purpose
             "1.3.6.1.5.5.7.3.2",  # Client Authentication
@@ -110,19 +125,24 @@ try {
             "1.3.6.1.5.2.3.5"  # KDC Authentication
         )
         
-        if ($ekus) {
-            foreach ($eku in $ekus) {
-                if ($eku -in $dangerousEKUs) {
-                    $issues += "Template has authentication EKU: $eku"
-                    if ($riskLevel -eq "Low") {
-                        $riskLevel = "Medium"
-                    }
+        foreach ($eku in $ekus) {
+            if ($eku -in $dangerousEKUs) {
+                $issues += "Template has authentication EKU: $eku"
+                if ($riskLevel -eq "Low") {
+                    $riskLevel = "Medium"
                 }
             }
         }
         
         # Check 3: No manager approval required?
-        $enrollmentFlag = $template.'msPKI-Enrollment-Flag'
+        $enrollmentFlag = if ($template.'mspki-enrollment-flag') {
+            if ($template.'mspki-enrollment-flag' -is [Array]) { 
+                $template.'mspki-enrollment-flag'[0] 
+            } else { 
+                $template.'mspki-enrollment-flag' 
+            }
+        } else { 0 }
+        
         if ($enrollmentFlag) {
             if (-not ($enrollmentFlag -band $PEND_ALL_REQUESTS)) {
                 if ($issues.Count -gt 0) {
@@ -139,62 +159,80 @@ try {
         }
         
         # Check 4: Who can enroll?
-        $templateACL = Get-Acl "AD:\$($template.DistinguishedName)"
-        $enrollmentRights = @()
-        $autoEnrollmentRights = @()
+        $templateDN = if ($template.distinguishedname) {
+            if ($template.distinguishedname -is [Array]) { 
+                $template.distinguishedname[0] 
+            } else { 
+                $template.distinguishedname 
+            }
+        } else { "" }
         
-        foreach ($ace in $templateACL.Access) {
-            if ($ace.AccessControlType -eq "Allow") {
-                # Check for enrollment permissions
-                if ($ace.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) {
-                    # Check specific extended rights
-                    $rightGuid = $ace.ObjectType
-                    
-                    # Enrollment right GUID
-                    if ($rightGuid -eq "0e10c968-78fb-11d2-90d4-00c04f79dc55" -or $rightGuid -eq "00000000-0000-0000-0000-000000000000") {
-                        $enrollmentRights += $ace.IdentityReference.Value
-                    }
-                    
-                    # AutoEnrollment right GUID
-                    if ($rightGuid -eq "a05b8cc2-17bc-4802-a710-e7c15ab866a2") {
-                        $autoEnrollmentRights += $ace.IdentityReference.Value
+        if ($templateDN) {
+            try {
+                $templateACL = Get-IVTemplateACL -TemplateDN $templateDN
+                $enrollmentRights = @()
+                $autoEnrollmentRights = @()
+                
+                foreach ($ace in $templateACL.Access) {
+                    if ($ace.AccessControlType -eq "Allow") {
+                        # Check for enrollment permissions
+                        if ($ace.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) {
+                            # Check specific extended rights
+                            $rightGuid = $ace.ObjectType
+                            
+                            # Enrollment right GUID
+                            if ($rightGuid -eq [guid]"0e10c968-78fb-11d2-90d4-00c04f79dc55" -or 
+                                $rightGuid -eq [guid]"00000000-0000-0000-0000-000000000000") {
+                                $enrollmentRights += $ace.IdentityReference.Value
+                            }
+                            
+                            # AutoEnrollment right GUID
+                            if ($rightGuid -eq [guid]"a05b8cc2-17bc-4802-a710-e7c15ab866a2") {
+                                $autoEnrollmentRights += $ace.IdentityReference.Value
+                            }
+                        }
+                        
+                        # Check for GenericAll
+                        if ($ace.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::GenericAll) {
+                            $enrollmentRights += $ace.IdentityReference.Value
+                        }
                     }
                 }
                 
-                # Check for GenericAll
-                if ($ace.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::GenericAll) {
-                    $enrollmentRights += $ace.IdentityReference.Value
-                }
-            }
-        }
-        
-        # Check if Domain Users or Authenticated Users can enroll
-        $broadGroups = @("Domain Users", "Authenticated Users", "Everyone", "Anonymous")
-        foreach ($principal in $enrollmentRights) {
-            foreach ($broadGroup in $broadGroups) {
-                if ($principal -like "*$broadGroup*") {
-                    $issues += "$broadGroup can enroll in this template"
-                    if ($riskLevel -ne "High") {
-                        $riskLevel = "Medium"
+                # Check if Domain Users or Authenticated Users can enroll
+                $broadGroups = @("Domain Users", "Authenticated Users", "Everyone", "Anonymous")
+                foreach ($principal in $enrollmentRights) {
+                    foreach ($broadGroup in $broadGroups) {
+                        if ($principal -like "*$broadGroup*") {
+                            $issues += "$broadGroup can enroll in this template"
+                            if ($riskLevel -ne "High") {
+                                $riskLevel = "Medium"
+                            }
+                        }
                     }
                 }
             }
+            catch {
+                # Unable to get ACL
+            }
         }
         
-        # Check 5: Is template enabled?
-        $templateOID = $template.'msPKI-Cert-Template-OID'
+        # Check 5: Certificate validity period
+        $templateOID = if ($template.'mspki-cert-template-oid') {
+            if ($template.'mspki-cert-template-oid' -is [Array]) { 
+                $template.'mspki-cert-template-oid'[0] 
+            } else { 
+                $template.'mspki-cert-template-oid' 
+            }
+        } else { "" }
         
-        # Check 6: Certificate validity period
-        $validityPeriod = $template.'pKIExpirationPeriod'
-        $overlapPeriod = $template.'pKIOverlapPeriod'
-        
-        # Check 7: Check for ESC3 - Certificate Request Agent
+        # Check 6: Check for ESC3 - Certificate Request Agent
         if ($ekus -contains "1.3.6.1.4.1.311.20.2.1") {  # Certificate Request Agent
             $issues += "Template allows Certificate Request Agent (ESC3 vulnerability)"
             $riskLevel = "High"
         }
         
-        # Check 8: Check if domain controller authentication is enabled
+        # Check 7: Check if domain controller authentication is enabled
         if ($ekus -contains "1.3.6.1.5.2.3.5") {  # KDC Authentication
             $issues += "Template allows domain controller authentication"
             $riskLevel = "High"
@@ -227,14 +265,18 @@ try {
         }
     }
     
-    # Check for published Certificate Authorities
+    # Check for published Certificate Authorities using ADSI
     $caContainer = "CN=Enrollment Services,CN=Public Key Services,CN=Services,$configDN"
     try {
-        $cas = Get-ADObject -SearchBase $caContainer -Filter {objectClass -eq "pKIEnrollmentService"} -Properties *
+        $filter = "(objectClass=pKIEnrollmentService)"
+        $cas = Search-IVADObjects -Filter $filter -SearchBase $caContainer -Properties @('cn', 'flags', 'cACertificate')
         
         foreach ($ca in $cas) {
             # Check if CA has insecure flags
-            $caFlags = $ca.flags
+            $caFlags = if ($ca.flags) {
+                if ($ca.flags -is [Array]) { $ca.flags[0] } else { $ca.flags }
+            } else { 0 }
+            
             if ($caFlags) {
                 $caIssues = @()
                 
@@ -244,8 +286,12 @@ try {
                 }
                 
                 if ($caIssues.Count -gt 0) {
+                    $caName = if ($ca.cn) { 
+                        if ($ca.cn -is [Array]) { $ca.cn[0] } else { $ca.cn }
+                    } else { "Unknown CA" }
+                    
                     $findings += @{
-                        ObjectName = $ca.Name
+                        ObjectName = $caName
                         ObjectType = "CertificateAuthority"
                         RiskLevel = "Medium"
                         Description = "Certificate Authority has insecure configuration: $($caIssues -join '; ')"
@@ -258,6 +304,7 @@ try {
     }
     catch {
         # CAs might not be accessible
+        $cas = @()
     }
     
     # Calculate execution time

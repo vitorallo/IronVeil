@@ -26,18 +26,20 @@ try {
     $findings = @()
     
     # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Load ADSI helper library
+    $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+    . $helperPath
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
-    # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
+    # Get domain information using ADSI
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
     
     # Get list of Domain Controllers (they have unconstrained delegation by default and that's expected)
-    $domainControllers = Get-ADDomainController -Filter * | Select-Object -ExpandProperty Name
+    $domainControllers = Get-IVADDomainController | Select-Object -ExpandProperty sAMAccountName | ForEach-Object { $_.Replace('$', '') }
     
     # Search for accounts with unconstrained delegation
     # userAccountControl flag 0x80000 (524288) = TRUSTED_FOR_DELEGATION
@@ -45,7 +47,7 @@ try {
     $filter = "(&(userAccountControl:1.2.840.113556.1.4.803:=524288)(!(userAccountControl:1.2.840.113556.1.4.803:=8192)))"
     
     # Get both user and computer accounts with unconstrained delegation
-    $unconstrainedAccounts = Get-ADObject -LDAPFilter $filter -Properties samAccountName, objectClass, userAccountControl, whenCreated, whenChanged, servicePrincipalName, memberOf, distinguishedName, enabled, description
+    $unconstrainedAccounts = Search-IVADObjects -Filter $filter -Properties @('samAccountName', 'objectClass', 'userAccountControl', 'whenCreated', 'whenChanged', 'servicePrincipalName', 'memberOf', 'distinguishedName', 'description')
     
     foreach ($account in $unconstrainedAccounts) {
         $objType = switch ($account.objectClass) {
@@ -81,8 +83,12 @@ try {
             $riskFactors = @()
             
             # Check how recently this was configured
-            $daysSinceChange = ((Get-Date) - $account.whenChanged).Days
-            $daysSinceCreation = ((Get-Date) - $account.whenCreated).Days
+            $changedValue = if ($account.whenChanged -is [Array]) { $account.whenChanged[0] } else { $account.whenChanged }
+            $createdValue = if ($account.whenCreated -is [Array]) { $account.whenCreated[0] } else { $account.whenCreated }
+            $changedDate = Convert-IVFileTimeToDateTime -FileTime ([Int64]$changedValue)
+            $createdDate = Convert-IVFileTimeToDateTime -FileTime ([Int64]$createdValue)
+            $daysSinceChange = if ($changedDate) { ((Get-Date) - $changedDate).Days } else { 0 }
+            $daysSinceCreation = if ($createdDate) { ((Get-Date) - $createdDate).Days } else { 0 }
             
             if ($daysSinceChange -lt 30) {
                 $riskFactors += "Recently modified ($daysSinceChange days ago)"
@@ -161,8 +167,9 @@ try {
     }
     
     # Check for KRBTGT with unconstrained delegation (should never happen)
-    $krbtgtAccount = Get-ADUser -Identity "krbtgt" -Properties userAccountControl -ErrorAction SilentlyContinue
-    if ($krbtgtAccount -and ($krbtgtAccount.userAccountControl -band 0x80000)) {
+    $krbtgtAccount = Get-IVADUser -SamAccountName "krbtgt" -Properties @('userAccountControl')
+    $krbtgtUacValue = if ($krbtgtAccount.userAccountControl -is [Array]) { $krbtgtAccount.userAccountControl[0] } else { $krbtgtAccount.userAccountControl }
+    if ($krbtgtAccount -and (([int]$krbtgtUacValue) -band 0x80000)) {
         $findings += @{
             ObjectName = "krbtgt"
             ObjectType = "ServiceAccount"
@@ -176,7 +183,7 @@ try {
     # Also check for accounts that might be trying to bypass detection
     # Look for accounts with both SERVER_TRUST_ACCOUNT and TRUSTED_FOR_DELEGATION
     $filter2 = "(&(userAccountControl:1.2.840.113556.1.4.803:=524288)(userAccountControl:1.2.840.113556.1.4.803:=8192))"
-    $hiddenDelegation = Get-ADObject -LDAPFilter $filter2 -Properties samAccountName, objectClass
+    $hiddenDelegation = Search-IVADObjects -Filter $filter2 -Properties @('samAccountName', 'objectClass')
     
     foreach ($account in $hiddenDelegation) {
         # Skip if already reported

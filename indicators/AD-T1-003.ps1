@@ -25,15 +25,16 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Load ADSI helper library
+    $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+    . $helperPath
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
-    # Get all domain controllers
-    $domainControllers = Get-ADDomainController -Filter * -Server $DomainName
+    # Get all domain controllers using ADSI
+    $domainControllers = Get-IVADDomainController
     
     if ($domainControllers.Count -eq 0) {
         throw "No domain controllers found in domain $DomainName"
@@ -59,8 +60,8 @@ try {
         $currentBuild = $null
         
         try {
-            # Get detailed OS information from the DC
-            $computerObj = Get-ADComputer -Identity $dcName -Properties OperatingSystem, OperatingSystemVersion, whenChanged -Server $dc.HostName
+            # Get detailed OS information from the DC using ADSI
+            $computerObj = Get-IVADObject -SamAccountName "$dcName$" -Properties @('operatingSystem', 'operatingSystemVersion', 'whenChanged')
             $osVersion = $computerObj.OperatingSystemVersion
             
             if ($osVersion) {
@@ -173,9 +174,11 @@ try {
             }
             
             # Check for signs of exploitation in computer account password age
-            $dcComputer = Get-ADComputer -Identity $dcName -Properties PasswordLastSet, whenChanged
-            if ($dcComputer.PasswordLastSet) {
-                $passwordAge = (Get-Date) - $dcComputer.PasswordLastSet
+            $dcComputer = Get-IVADObject -SamAccountName "$dcName$" -Properties @('pwdLastSet', 'whenChanged')
+            if ($dcComputer.pwdLastSet) {
+                $passwordLastSet = Convert-IVFileTimeToDateTime -FileTime ([Int64]$dcComputer.pwdLastSet)
+                if ($passwordLastSet) {
+                    $passwordAge = (Get-Date) - $passwordLastSet
                 
                 # DC passwords should change every 30 days by default
                 # A very recent password change could indicate exploitation
@@ -186,7 +189,7 @@ try {
                         RiskLevel = "Critical"
                         Description = "Domain Controller password was changed within the last 24 hours. This could indicate Zerologon exploitation as the attack resets the DC machine account password."
                         Remediation = "1. IMMEDIATE INVESTIGATION REQUIRED. 2. Check Event logs for Event ID 4742 (computer account changed). 3. Look for Event ID 5829 (Netlogon denied vulnerable connection). 4. Check for unauthorized access or changes. 5. Consider this a potential active breach."
-                        AffectedAttributes = @("PasswordLastSet", "whenChanged")
+                        AffectedAttributes = @("pwdLastSet", "whenChanged")
                     }
                 }
                 elseif ($passwordAge.Days -gt 45) {
@@ -197,8 +200,9 @@ try {
                         RiskLevel = "Medium"
                         Description = "Domain Controller password hasn't been changed in $([int]$passwordAge.Days) days. This might indicate disabled automatic password rotation."
                         Remediation = "1. Verify automatic machine account password changes are enabled. 2. Check DisablePasswordChange and MaximumPasswordAge registry settings. 3. Consider manually resetting if needed."
-                        AffectedAttributes = @("PasswordLastSet")
+                        AffectedAttributes = @("pwdLastSet")
                     }
+                }
                 }
             }
         }
@@ -217,7 +221,7 @@ try {
     
     # Check for any computer accounts with empty passwords (potential Zerologon exploitation result)
     $filter = "(&(objectClass=computer)(userAccountControl:1.2.840.113556.1.4.803:=2080))"
-    $computersWithEmptyPassword = Get-ADObject -LDAPFilter $filter -Properties samAccountName, whenChanged
+    $computersWithEmptyPassword = Search-IVADObjects -Filter $filter -Properties @('samAccountName', 'whenChanged')
     
     foreach ($computer in $computersWithEmptyPassword) {
         $findings += @{

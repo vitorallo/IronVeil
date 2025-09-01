@@ -25,22 +25,23 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Load ADSI helper library
+    $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+    . $helperPath
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
-    # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
-    $domainNetBIOS = $domain.NetBIOSName
+    # Get domain information using ADSI
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
+    $domainNetBIOS = $domainInfo.NetBIOSName
     
     # Search for any accounts with constrained delegation configured
     # The msDS-AllowedToDelegateTo attribute contains the SPNs the account can delegate to
     $filter = "(msDS-AllowedToDelegateTo=*)"
-    $delegatedAccounts = Get-ADObject -LDAPFilter $filter -Properties msDS-AllowedToDelegateTo, samAccountName, objectClass, userAccountControl, whenChanged, memberOf, servicePrincipalName
+    $delegatedAccounts = Search-IVADObjects -Filter $filter -Properties @('msDS-AllowedToDelegateTo', 'samAccountName', 'objectClass', 'userAccountControl', 'whenChanged', 'memberOf', 'servicePrincipalName')
     
     foreach ($account in $delegatedAccounts) {
         $objType = switch ($account.objectClass) {
@@ -72,7 +73,7 @@ try {
                     $targetServer = $Matches[2].Split('.')[0]
                 }
                 
-                $domainControllers = Get-ADDomainController -Filter * | Select-Object -ExpandProperty Name
+                $domainControllers = Get-IVADDomainController | Select-Object -ExpandProperty sAMAccountName | ForEach-Object { $_.Replace('$', '') }
                 $isDCTarget = $false
                 
                 if ($targetServer -and $domainControllers -contains $targetServer) {
@@ -96,7 +97,8 @@ try {
         
         # Check if Protocol Transition is enabled (S4U2Self)
         # This is indicated by the TRUSTED_TO_AUTH_FOR_DELEGATION flag (0x1000000)
-        if ($account.userAccountControl -band 0x1000000) {
+        $uacValue = if ($account.userAccountControl -is [Array]) { $account.userAccountControl[0] } else { $account.userAccountControl }
+        if (([int]$uacValue) -band 0x1000000) {
             $hasKrbtgtDelegation = $account.'msDS-AllowedToDelegateTo' | Where-Object { $_ -match "(?i)krbtgt/" }
             
             if ($hasKrbtgtDelegation) {
@@ -154,7 +156,7 @@ try {
     }
     
     # Also check for traditional unconstrained delegation (covered in AD-T1-006 but check KRBTGT specifically here)
-    $krbtgtAccount = Get-ADUser -Identity "krbtgt" -Properties userAccountControl, msDS-AllowedToDelegateTo -ErrorAction SilentlyContinue
+    $krbtgtAccount = Get-IVADUser -SamAccountName "krbtgt" -Properties @('userAccountControl', 'msDS-AllowedToDelegateTo')
     
     if ($krbtgtAccount) {
         # Check if KRBTGT has any delegation settings (it shouldn't)
@@ -171,7 +173,8 @@ try {
         }
         
         # Check for unconstrained delegation on KRBTGT
-        if ($krbtgtAccount.userAccountControl -band 0x80000) {
+        $krbtgtUacValue = if ($krbtgtAccount.userAccountControl -is [Array]) { $krbtgtAccount.userAccountControl[0] } else { $krbtgtAccount.userAccountControl }
+        if (([int]$krbtgtUacValue) -band 0x80000) {
             $findings += @{
                 ObjectName = "krbtgt"
                 ObjectType = "ServiceAccount"
@@ -185,7 +188,7 @@ try {
     
     # Check for any SPNs that might be trying to impersonate KRBTGT
     $filter = "(servicePrincipalName=*krbtgt*)"
-    $suspiciousSPNs = Get-ADObject -LDAPFilter $filter -Properties servicePrincipalName, samAccountName, objectClass
+    $suspiciousSPNs = Search-IVADObjects -Filter $filter -Properties @('servicePrincipalName', 'samAccountName', 'objectClass')
     
     foreach ($obj in $suspiciousSPNs) {
         # Skip the actual KRBTGT account

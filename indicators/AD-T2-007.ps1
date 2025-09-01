@@ -25,27 +25,27 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Import IronVeil ADSI Helper
+    . "$PSScriptRoot\IronVeil-ADSIHelper.ps1"
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
     # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
-    $domainSID = $domain.DomainSID.Value
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
+    $domainSID = $domainInfo.DomainSID
     
     # UserAccountControl flag for "Do not require Kerberos preauthentication"
     $DONT_REQ_PREAUTH = 0x400000  # 4194304 in decimal
     
     # Get all users with Kerberos pre-authentication disabled
     # Using LDAP filter with bitwise AND operation
-    $vulnerableUsers = Get-ADUser -LDAPFilter "(userAccountControl:1.2.840.113556.1.4.803:=4194304)" `
-                                  -Properties userAccountControl, memberOf, adminCount, passwordLastSet, `
-                                             lastLogonDate, enabled, whenCreated, whenChanged, `
-                                             description, title, department
+    $vulnerableUsers = Get-IVADUser -Filter "(userAccountControl:1.2.840.113556.1.4.803:=4194304)" `
+                                    -Properties @('userAccountControl', 'memberOf', 'adminCount', 'pwdLastSet',
+                                                 'lastLogonTimestamp', 'whenCreated', 'whenChanged',
+                                                 'description', 'title', 'department')
     
     # Define privileged groups for risk assessment
     $privilegedGroups = @(
@@ -71,7 +71,10 @@ try {
         $riskFactors = @()
         
         # Check if account is enabled
-        if ($user.enabled) {
+        $uac = [int]$user.userAccountControl
+        $isEnabled = -not ($uac -band 0x2)  # ACCOUNTDISABLE flag
+        
+        if ($isEnabled) {
             $enabledVulnerable++
             $riskFactors += "Account is active"
             $riskLevel = "High"
@@ -92,20 +95,26 @@ try {
         
         # Check group memberships
         if ($user.memberOf) {
-            foreach ($group in $user.memberOf) {
+            $memberOfArray = if ($user.memberOf -is [array]) { $user.memberOf } else { @($user.memberOf) }
+            
+            foreach ($groupDN in $memberOfArray) {
                 try {
-                    $groupObj = Get-ADGroup -Identity $group -Properties primaryGroupToken
-                    $groupSID = $groupObj.SID.Value
+                    $groupEntry = [ADSI]"LDAP://$groupDN"
+                    $groupName = $groupEntry.Properties["name"][0]
+                    $groupSID = if ($groupEntry.Properties["objectSID"][0]) {
+                        (New-Object System.Security.Principal.SecurityIdentifier($groupEntry.Properties["objectSID"][0], 0)).Value
+                    } else { $null }
+                    $groupEntry.Dispose()
                     
                     if ($groupSID -in $privilegedGroups) {
                         $isPrivileged = $true
-                        $privilegedGroupNames += $groupObj.Name
+                        $privilegedGroupNames += $groupName
                     }
                     
                     # Also check for sensitive non-default groups
-                    if ($groupObj.Name -match "admin|operator|backup|replicat|certif|schema|enterpr|domain con") {
-                        if ($privilegedGroupNames -notcontains $groupObj.Name) {
-                            $privilegedGroupNames += $groupObj.Name
+                    if ($groupName -match "admin|operator|backup|replicat|certif|schema|enterpr|domain con") {
+                        if ($privilegedGroupNames -notcontains $groupName) {
+                            $privilegedGroupNames += $groupName
                         }
                     }
                 }
@@ -123,8 +132,9 @@ try {
         
         # Check password age
         $passwordInfo = "Unknown"
-        if ($user.passwordLastSet) {
-            $passwordAge = ((Get-Date) - $user.passwordLastSet).Days
+        if ($user.pwdLastSet) {
+            $pwdLastSetTime = [DateTime]::FromFileTime([long]$user.pwdLastSet)
+            $passwordAge = ((Get-Date) - $pwdLastSetTime).Days
             $passwordInfo = "$passwordAge days old"
             
             if ($passwordAge -gt 365) {
@@ -143,11 +153,12 @@ try {
         
         # Check last logon
         $activityInfo = "Unknown"
-        if ($user.lastLogonDate) {
-            $daysSinceLogon = ((Get-Date) - $user.lastLogonDate).Days
+        if ($user.lastLogonTimestamp) {
+            $lastLogonTime = [DateTime]::FromFileTime([long]$user.lastLogonTimestamp)
+            $daysSinceLogon = ((Get-Date) - $lastLogonTime).Days
             $activityInfo = "Last logon $daysSinceLogon days ago"
             
-            if ($daysSinceLogon -lt 30 -and $user.enabled) {
+            if ($daysSinceLogon -lt 30 -and $isEnabled) {
                 $riskFactors += "Recently active account"
                 if ($riskLevel -eq "Medium") {
                     $riskLevel = "High"
@@ -163,7 +174,7 @@ try {
         
         # Check if it appears to be a service account
         $accountType = "User"
-        if ($user.SamAccountName -match "^svc|service|sql|app|daemon|batch|task|job" -or
+        if ($user.sAMAccountName -match "^svc|service|sql|app|daemon|batch|task|job" -or
             $user.description -match "service|automated|batch|scheduled|system") {
             $accountType = "Service Account"
             $riskFactors += "Appears to be a service account"
@@ -171,7 +182,12 @@ try {
         
         # Check account age
         if ($user.whenCreated) {
-            $accountAge = ((Get-Date) - $user.whenCreated).Days
+            $whenCreatedTime = if ($user.whenCreated -is [DateTime]) { 
+                $user.whenCreated 
+            } else { 
+                [DateTime]::Parse($user.whenCreated) 
+            }
+            $accountAge = ((Get-Date) - $whenCreatedTime).Days
             if ($accountAge -lt 30) {
                 $riskFactors += "Recently created account ($accountAge days)"
             }
@@ -179,12 +195,12 @@ try {
         
         # Build description
         $description = "User has 'Do not require Kerberos preauthentication' flag set, vulnerable to AS-REP Roasting. "
-        $description += "Account type: $accountType. Status: $(if($user.enabled){'Enabled'}else{'Disabled'}). "
+        $description += "Account type: $accountType. Status: $(if($isEnabled){'Enabled'}else{'Disabled'}). "
         $description += "Password: $passwordInfo. Activity: $activityInfo. "
         $description += "Risk factors: $($riskFactors -join '; ')."
         
         $findings += @{
-            ObjectName = $user.SamAccountName
+            ObjectName = $user.sAMAccountName
             ObjectType = $accountType
             RiskLevel = $riskLevel
             Description = $description
@@ -194,15 +210,18 @@ try {
     }
     
     # Also check for computer accounts with pre-auth disabled (less common but possible)
-    $vulnerableComputers = Get-ADComputer -LDAPFilter "(userAccountControl:1.2.840.113556.1.4.803:=4194304)" `
-                                          -Properties userAccountControl, operatingSystem, lastLogonDate, enabled
+    $vulnerableComputers = Get-IVADComputer -Filter "(userAccountControl:1.2.840.113556.1.4.803:=4194304)" `
+                                            -Properties @('userAccountControl', 'operatingSystem', 'lastLogonTimestamp')
     
     foreach ($computer in $vulnerableComputers) {
+        $uac = [int]$computer.userAccountControl
+        $isEnabled = -not ($uac -band 0x2)
+        
         $findings += @{
-            ObjectName = $computer.Name
+            ObjectName = $computer.name
             ObjectType = "Computer"
             RiskLevel = "High"
-            Description = "Computer account has Kerberos pre-authentication disabled. OS: $($computer.operatingSystem). This is highly unusual and could indicate compromise or misconfiguration."
+            Description = "Computer account has Kerberos pre-authentication disabled. OS: $($computer.operatingSystem). Status: $(if($isEnabled){'Enabled'}else{'Disabled'}). This is highly unusual and could indicate compromise or misconfiguration."
             Remediation = "1. Investigate why this computer has pre-auth disabled. 2. Enable Kerberos pre-authentication. 3. Check if this computer is legitimate. 4. Review recent changes to this computer object. 5. Consider this a potential indicator of compromise."
             AffectedAttributes = @("userAccountControl", "DONT_REQUIRE_PREAUTH")
         }
@@ -259,10 +278,10 @@ try {
         Metadata = @{
             Domain = $DomainName
             ExecutionTime = [Math]::Round($executionTime, 2)
-            VulnerableUsers = $vulnerableUsers.Count
-            VulnerableComputers = $vulnerableComputers.Count
+            TotalVulnerableUsers = $totalVulnerable
             PrivilegedVulnerable = $privilegedVulnerable
             EnabledVulnerable = $enabledVulnerable
+            VulnerableComputers = $vulnerableComputers.Count
         }
     }
 }

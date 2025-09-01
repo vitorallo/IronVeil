@@ -25,16 +25,17 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Load ADSI helper library
+    $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+    . $helperPath
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
-    # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainSID = $domain.DomainSID.Value
+    # Get domain information using ADSI
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainSID = $domainInfo.DomainSID
     
     # Define well-known privileged SIDs to check for
     $privilegedSIDs = @{
@@ -74,13 +75,13 @@ try {
         }
     }
     
-    # Get all users with non-empty SIDHistory
-    $filter = "(&(objectClass=user)(objectCategory=person)(sIDHistory=*))"
-    $usersWithSIDHistory = Get-ADObject -LDAPFilter $filter -Properties sIDHistory, samAccountName, distinguishedName, enabled, whenCreated, whenChanged, memberOf
+    # Get all users with non-empty SIDHistory using ADSI
+    $userFilter = "(&(objectClass=user)(objectCategory=person)(sIDHistory=*))"
+    $usersWithSIDHistory = Search-IVADObjects -Filter $userFilter -Properties @('sIDHistory', 'samAccountName', 'distinguishedName', 'userAccountControl', 'whenCreated', 'whenChanged', 'memberOf')
     
     # Also check computer accounts as they can have SIDHistory too
     $computerFilter = "(&(objectClass=computer)(sIDHistory=*))"
-    $computersWithSIDHistory = Get-ADObject -LDAPFilter $computerFilter -Properties sIDHistory, samAccountName, distinguishedName, enabled, whenCreated, whenChanged
+    $computersWithSIDHistory = Search-IVADObjects -Filter $computerFilter -Properties @('sIDHistory', 'samAccountName', 'distinguishedName', 'userAccountControl', 'whenCreated', 'whenChanged')
     
     # Combine users and computers
     $allObjectsWithSIDHistory = @()
@@ -141,8 +142,10 @@ try {
         # If suspicious SIDs found, create a finding
         if ($suspiciousSIDs.Count -gt 0) {
             $sidList = ($suspiciousSIDs | ForEach-Object { "$($_.GroupName) ($($_.SID))" }) -join "; "
-            $daysSinceCreation = (Get-Date) - $obj.whenCreated
-            $daysSinceModification = (Get-Date) - $obj.whenChanged
+            $createdDate = Convert-IVFileTimeToDateTime -FileTime ([Int64]$obj.whenCreated)
+            $modifiedDate = Convert-IVFileTimeToDateTime -FileTime ([Int64]$obj.whenChanged)
+            $daysSinceCreation = if ($createdDate) { (Get-Date) - $createdDate } else { [TimeSpan]::Zero }
+            $daysSinceModification = if ($modifiedDate) { (Get-Date) - $modifiedDate } else { [TimeSpan]::Zero }
             
             # Determine risk level based on various factors
             $riskLevel = "Critical"

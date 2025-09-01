@@ -25,18 +25,17 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
-    Import-Module GroupPolicy -ErrorAction SilentlyContinue
+    # Import IronVeil ADSI Helper
+    . "$PSScriptRoot\IronVeil-ADSIHelper.ps1"
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
     # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
-    $domainNetBIOS = $domain.NetBIOSName
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
+    $domainNetBIOS = $domainInfo.NetBIOSName
     
     # Get SYSVOL path
     $sysvolPath = "\\$DomainName\SYSVOL\$DomainName\Policies"
@@ -56,31 +55,15 @@ try {
         "Printers\Printers.xml"
     )
     
-    # Get all GPOs
-    try {
-        $gpos = Get-GPO -All -Domain $DomainName
-    }
-    catch {
-        $gpos = @()
-        # Try alternative method using AD module
-        $gpoContainer = "CN=Policies,CN=System,$domainDN"
-        $gpoObjects = Get-ADObject -SearchBase $gpoContainer -Filter {objectClass -eq "groupPolicyContainer"} -Properties displayName, gPCFileSysPath
-        
-        foreach ($gpoObj in $gpoObjects) {
-            $gpos += @{
-                Id = $gpoObj.Name
-                DisplayName = $gpoObj.displayName
-                Path = $gpoObj.gPCFileSysPath
-            }
-        }
-    }
+    # Get all GPOs using ADSI helper
+    $gpos = Get-IVGPO -DomainName $DomainName -All
     
     $gposChecked = 0
     $gposWithPasswords = 0
     
     foreach ($gpo in $gpos) {
         $gpoName = if ($gpo.DisplayName) { $gpo.DisplayName } else { $gpo.Id }
-        $gpoId = if ($gpo.Id) { $gpo.Id } else { $gpo.Name }
+        $gpoId = $gpo.Id
         $gpoPath = "$sysvolPath\{$gpoId}"
         
         if (-not (Test-Path $gpoPath)) {
@@ -154,32 +137,27 @@ try {
         }
     }
     
-    # Part 2: Check for "Store passwords using reversible encryption" policy
+    # Part 2: Check for "Store passwords using reversible encryption" in GPO files
     $reversibleEncryptionGPOs = @()
     
     foreach ($gpo in $gpos) {
         $gpoName = if ($gpo.DisplayName) { $gpo.DisplayName } else { $gpo.Id }
+        $gpoId = $gpo.Id
         
-        try {
-            # Check if GPO has password policy settings
-            if (Get-Command Get-GPOReport -ErrorAction SilentlyContinue) {
-                $gpoReport = Get-GPOReport -Name $gpoName -ReportType Xml -Domain $DomainName -ErrorAction SilentlyContinue
+        # Check GptTmpl.inf for security settings
+        $gptTmplPath = "$sysvolPath\{$gpoId}\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf"
+        
+        if (Test-Path $gptTmplPath) {
+            try {
+                $content = Get-Content $gptTmplPath -Raw -ErrorAction SilentlyContinue
                 
-                if ($gpoReport -match "ClearTextPassword.*true|ReversibleEncryption.*true|StoreClearTextPasswords.*1") {
+                # Look for ClearTextPassword setting in [System Access] section
+                if ($content -match "ClearTextPassword\s*=\s*1") {
                     $reversibleEncryptionGPOs += $gpoName
                 }
             }
-        }
-        catch {
-            # Alternative method: Check registry.pol files directly
-            $gpoId = if ($gpo.Id) { $gpo.Id } else { $gpo.Name }
-            $regPolPath = "$sysvolPath\{$gpoId}\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf"
-            
-            if (Test-Path $regPolPath) {
-                $content = Get-Content $regPolPath -Raw -ErrorAction SilentlyContinue
-                if ($content -match "ClearTextPassword\s*=\s*1|PasswordComplexity\s*=\s*0.*ClearTextPassword") {
-                    $reversibleEncryptionGPOs += $gpoName
-                }
+            catch {
+                # Error reading file, skip
             }
         }
     }
@@ -196,40 +174,57 @@ try {
     }
     
     # Part 3: Check Default Domain Policy for reversible encryption
-    try {
-        $defaultDomainPolicy = Get-ADDefaultDomainPasswordPolicy -Identity $DomainName
-        
-        if ($defaultDomainPolicy.ReversibleEncryptionEnabled -eq $true) {
-            $findings += @{
-                ObjectName = "Default Domain Password Policy"
-                ObjectType = "PasswordPolicy"
-                RiskLevel = "Critical"
-                Description = "Domain-wide password policy has reversible encryption ENABLED! All user passwords in this domain are stored in a reversibly encrypted format, essentially clear text."
-                Remediation = "1. CRITICAL: Immediately disable reversible encryption in the Default Domain Policy. 2. Force ALL domain users to change their passwords. 3. Review why this was enabled - it's almost never necessary. 4. Audit all password access logs."
-                AffectedAttributes = @("ReversibleEncryptionEnabled", "msDS-PasswordSettings")
+    # Note: We can't directly check reversible encryption via LDAP, but we can check if it's configured in Default Domain Policy GPO
+    $defaultDomainPolicyGuid = "{31B2F340-016D-11D2-945F-00C04FB984F9}"
+    $defaultPolicyPath = "$sysvolPath\{$defaultDomainPolicyGuid}\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf"
+    
+    if (Test-Path $defaultPolicyPath) {
+        try {
+            $content = Get-Content $defaultPolicyPath -Raw -ErrorAction SilentlyContinue
+            
+            if ($content -match "ClearTextPassword\s*=\s*1") {
+                $findings += @{
+                    ObjectName = "Default Domain Policy"
+                    ObjectType = "PasswordPolicy"
+                    RiskLevel = "Critical"
+                    Description = "Domain-wide password policy has reversible encryption ENABLED! All user passwords in this domain are stored in a reversibly encrypted format, essentially clear text."
+                    Remediation = "1. CRITICAL: Immediately disable reversible encryption in the Default Domain Policy. 2. Force ALL domain users to change their passwords. 3. Review why this was enabled - it's almost never necessary. 4. Audit all password access logs."
+                    AffectedAttributes = @("ReversibleEncryptionEnabled", "msDS-PasswordSettings")
+                }
             }
         }
-    }
-    catch {
-        # Couldn't check default domain policy
+        catch {
+            # Couldn't check default domain policy
+        }
     }
     
     # Part 4: Check for Fine-Grained Password Policies with reversible encryption
     try {
-        $fgppObjects = Get-ADFineGrainedPasswordPolicy -Filter * -Properties * -ErrorAction SilentlyContinue
+        $fgppObjects = Get-IVFineGrainedPasswordPolicy -DomainName $DomainName
         
         foreach ($fgpp in $fgppObjects) {
             if ($fgpp.ReversibleEncryptionEnabled -eq $true) {
-                $appliesTo = ($fgpp.AppliesTo | ForEach-Object { 
-                    $obj = Get-ADObject $_ -Properties Name -ErrorAction SilentlyContinue
-                    if ($obj) { $obj.Name } else { $_ }
-                }) -join ", "
+                # Get names of objects this policy applies to
+                $appliesTo = @()
+                foreach ($targetDN in $fgpp.AppliesTo) {
+                    try {
+                        $targetEntry = [ADSI]"LDAP://$targetDN"
+                        $targetName = $targetEntry.Properties["name"][0]
+                        $appliesTo += $targetName
+                        $targetEntry.Dispose()
+                    }
+                    catch {
+                        $appliesTo += $targetDN
+                    }
+                }
+                
+                $appliesToStr = $appliesTo -join ", "
                 
                 $findings += @{
                     ObjectName = $fgpp.Name
                     ObjectType = "FineGrainedPasswordPolicy"
                     RiskLevel = "High"
-                    Description = "Fine-Grained Password Policy has reversible encryption enabled. Applies to: $appliesTo. Passwords for these users/groups are stored in reversible format."
+                    Description = "Fine-Grained Password Policy has reversible encryption enabled. Applies to: $appliesToStr. Passwords for these users/groups are stored in reversible format."
                     Remediation = "1. Disable reversible encryption in this FGPP. 2. Force password changes for all affected users. 3. Review if digest authentication is truly required."
                     AffectedAttributes = @("ReversibleEncryptionEnabled", "msDS-PasswordSettingsPrecedence", "AppliesTo")
                 }

@@ -25,16 +25,20 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Load ADSI helper library
+    $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+    . $helperPath
     
     if (-not $DomainName) {
-        throw "Domain name could not be determined"
+        $DomainName = $env:USERDNSDOMAIN
+        if (-not $DomainName) {
+            throw "Domain name could not be determined"
+        }
     }
     
-    # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
+    # Get domain information using ADSI
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
     
     # Check 1: Look for suspicious computer objects that might be fake DCs
     # DCShadow typically creates computer objects with specific attributes
@@ -42,13 +46,16 @@ try {
     
     # Search for computer objects with server reference but not actual DCs
     $filter = "(&(objectClass=computer)(serverReference=*))"
-    $computers = Get-ADObject -LDAPFilter $filter -Properties serverReference, whenCreated, whenChanged, servicePrincipalName, userAccountControl -SearchBase $domainDN
+    $computers = Search-IVADObjects -Filter $filter -Properties @("serverReference", "whenCreated", "whenChanged", "servicePrincipalName", "userAccountControl") -SearchBase $domainDN
     
     # Get list of legitimate domain controllers
-    $legitimateDCs = Get-ADDomainController -Filter * | Select-Object -ExpandProperty Name
+    $legitimateDCs = Get-IVADDomainController | Select-Object -ExpandProperty sAMAccountName | ForEach-Object { $_.Replace('$', '') }
     
     foreach ($computer in $computers) {
-        $computerName = $computer.Name
+        $computerName = $computer.name
+        if (-not $computerName) {
+            $computerName = ($computer.distinguishedName -split ',')[0] -replace '^CN=', ''
+        }
         
         # Check if this computer is not in the legitimate DC list
         if ($legitimateDCs -notcontains $computerName) {
@@ -57,10 +64,13 @@ try {
             $suspicionReasons = @()
             
             # Check if created recently (within last 30 days)
-            $daysSinceCreation = (Get-Date) - $computer.whenCreated
-            if ($daysSinceCreation.Days -lt 30) {
-                $isSuspicious = $true
-                $suspicionReasons += "Recently created (within 30 days)"
+            $createdDate = Convert-IVFileTimeToDateTime -FileTime ([Int64]$computer.whenCreated)
+            if ($createdDate) {
+                $daysSinceCreation = (Get-Date) - $createdDate
+                if ($daysSinceCreation.Days -lt 30) {
+                    $isSuspicious = $true
+                    $suspicionReasons += "Recently created (within 30 days)"
+                }
             }
             
             # Check for DC-like SPNs on non-DC computer
@@ -86,28 +96,35 @@ try {
     }
     
     # Check 2: Look for objects in the Configuration partition that shouldn't be there
-    $configDN = "CN=Configuration,$domainDN"
+    $configDN = $domainInfo.ConfigurationNamingContext
     $sitesContainer = "CN=Sites,$configDN"
     
     # Check for suspicious server objects in Sites container
-    $servers = Get-ADObject -Filter {objectClass -eq "server"} -SearchBase $sitesContainer -Properties whenCreated, whenChanged
+    $serverFilter = "(objectClass=server)"
+    $servers = Search-IVADObjects -Filter $serverFilter -SearchBase $sitesContainer -Properties @("whenCreated", "whenChanged")
     
     foreach ($server in $servers) {
-        $serverName = $server.Name
+        $serverName = $server.name
+        if (-not $serverName) {
+            $serverName = ($server.distinguishedName -split ',')[0] -replace '^CN=', ''
+        }
         
         # Check if this server is not in the legitimate DC list
         if ($legitimateDCs -notcontains $serverName) {
-            $daysSinceCreation = (Get-Date) - $server.whenCreated
-            
-            # Flag if created recently and not a known DC
-            if ($daysSinceCreation.Days -lt 30) {
-                $findings += @{
-                    ObjectName = $serverName
-                    ObjectType = "Server"
-                    RiskLevel = "Critical"
-                    Description = "Suspicious server object in Sites container not matching any legitimate DC, created within last 30 days. This is a strong indicator of DCShadow attack."
-                    Remediation = "1. IMMEDIATE ACTION REQUIRED. 2. Investigate who created this server object. 3. Remove the suspicious server object from Sites container. 4. Audit all recent replication metadata. 5. Consider this a confirmed breach and initiate incident response."
-                    AffectedAttributes = @("whenCreated", "distinguishedName")
+            $createdDate = Convert-IVFileTimeToDateTime -FileTime ([Int64]$server.whenCreated)
+            if ($createdDate) {
+                $daysSinceCreation = (Get-Date) - $createdDate
+                
+                # Flag if created recently and not a known DC
+                if ($daysSinceCreation.Days -lt 30) {
+                    $findings += @{
+                        ObjectName = $serverName
+                        ObjectType = "Server"
+                        RiskLevel = "Critical"
+                        Description = "Suspicious server object in Sites container not matching any legitimate DC, created within last 30 days. This is a strong indicator of DCShadow attack."
+                        Remediation = "1. IMMEDIATE ACTION REQUIRED. 2. Investigate who created this server object. 3. Remove the suspicious server object from Sites container. 4. Audit all recent replication metadata. 5. Consider this a confirmed breach and initiate incident response."
+                        AffectedAttributes = @("whenCreated", "distinguishedName")
+                    }
                 }
             }
         }
@@ -123,18 +140,23 @@ try {
     
     foreach ($criticalObj in $criticalObjects) {
         try {
-            $obj = Get-ADObject -Identity $criticalObj.DN -Properties whenChanged, modifyTimeStamp
-            $daysSinceModification = (Get-Date) - $obj.whenChanged
-            
-            # Flag if modified very recently (within 7 days) - adjust threshold as needed
-            if ($daysSinceModification.Days -lt 7) {
-                $findings += @{
-                    ObjectName = $criticalObj.DN
-                    ObjectType = $criticalObj.Type
-                    RiskLevel = "High"
-                    Description = "Critical AD object recently modified (within 7 days). While this could be legitimate, it should be verified against change management records."
-                    Remediation = "1. Verify this change against change management records. 2. Review the specific attributes that were modified. 3. Check audit logs for who made the change. 4. If unauthorized, investigate as potential DCShadow activity."
-                    AffectedAttributes = @("whenChanged", "modifyTimeStamp")
+            $obj = Get-IVADObject -DistinguishedName $criticalObj.DN -Properties @("whenChanged", "modifyTimeStamp")
+            if ($obj -and $obj.whenChanged) {
+                $modifiedDate = Convert-IVFileTimeToDateTime -FileTime ([Int64]$obj.whenChanged)
+                if ($modifiedDate) {
+                    $daysSinceModification = (Get-Date) - $modifiedDate
+                    
+                    # Flag if modified very recently (within 7 days) - adjust threshold as needed
+                    if ($daysSinceModification.Days -lt 7) {
+                        $findings += @{
+                            ObjectName = $criticalObj.DN
+                            ObjectType = $criticalObj.Type
+                            RiskLevel = "High"
+                            Description = "Critical AD object recently modified (within 7 days). While this could be legitimate, it should be verified against change management records."
+                            Remediation = "1. Verify this change against change management records. 2. Review the specific attributes that were modified. 3. Check audit logs for who made the change. 4. If unauthorized, investigate as potential DCShadow activity."
+                            AffectedAttributes = @("whenChanged", "modifyTimeStamp")
+                        }
+                    }
                 }
             }
         }
@@ -144,10 +166,11 @@ try {
     }
     
     # Check 4: Look for unusual NTDS Service objects
-    $ntdsSettings = Get-ADObject -Filter {objectClass -eq "nTDSDSA"} -Properties whenCreated, options
+    $ntdsFilter = "(objectClass=nTDSDSA)"
+    $ntdsSettings = Search-IVADObjects -Filter $ntdsFilter -SearchBase $configDN -Properties @("whenCreated", "options")
     
     foreach ($ntds in $ntdsSettings) {
-        $parentServer = ($ntds.DistinguishedName -split ",", 2)[1]
+        $parentServer = ($ntds.distinguishedName -split ",", 2)[1]
         $serverName = ($parentServer -split "=", 2)[1] -split ",", 2 | Select-Object -First 1
         
         if ($legitimateDCs -notcontains $serverName) {

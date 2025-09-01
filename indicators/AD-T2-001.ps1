@@ -25,17 +25,18 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Import ADSI helper functions
+    $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+    . $helperPath
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
-    # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
-    $domainSID = $domain.DomainSID.Value
+    # Get domain information using ADSI
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
+    $domainSID = $domainInfo.DomainSID
     
     # Define the DCSync-related extended rights GUIDs
     $dcSyncRights = @{
@@ -65,8 +66,8 @@ try {
         "S-1-5-9"          # Enterprise Domain Controllers
     )
     
-    # Get the ACL of the domain object
-    $domainACL = Get-Acl "AD:\$domainDN"
+    # Get the ACL of the domain object using ADSI
+    $domainACL = Get-IVDomainACL -DomainDN $domainDN
     
     # Check each ACE in the ACL
     foreach ($ace in $domainACL.Access) {
@@ -80,12 +81,12 @@ try {
         $grantedRights = @()
         
         foreach ($rightName in $dcSyncRights.Keys) {
-            $rightGuid = $dcSyncRights[$rightName]
+            $rightGuid = [guid]$dcSyncRights[$rightName]
             
             # Check if this ACE includes the specific extended right
             if ($ace.ObjectType -eq $rightGuid -or 
                 ($ace.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -and 
-                $ace.ObjectType -eq "00000000-0000-0000-0000-000000000000") {
+                $ace.ObjectType -eq ([guid]"00000000-0000-0000-0000-000000000000")) {
                 
                 $hasDCSync = $true
                 $grantedRights += $rightName
@@ -129,12 +130,13 @@ try {
                 # This is a non-standard principal with DCSync rights
                 $objectInfo = $null
                 try {
-                    # Try to get more information about the principal
+                    # Try to get more information about the principal using ADSI
                     if ($identitySID -match "^S-1-") {
-                        $objectInfo = Get-ADObject -Filter {objectSID -eq $identitySID} -Properties objectClass, whenCreated, whenChanged -ErrorAction SilentlyContinue
+                        $objectInfo = Get-IVObjectBySID -SID $identitySID -Properties @('objectClass', 'whenCreated', 'whenChanged')
                     }
                     else {
-                        $objectInfo = Get-ADObject -Filter {sAMAccountName -eq $identityName.Split('\')[-1]} -Properties objectClass, whenCreated, whenChanged -ErrorAction SilentlyContinue
+                        $splitName = $identityName.Split('\')[-1]
+                        $objectInfo = Get-IVObjectByName -Name $splitName -Properties @('objectClass', 'whenCreated', 'whenChanged')
                     }
                 }
                 catch {
@@ -145,10 +147,21 @@ try {
                 $additionalInfo = ""
                 
                 if ($objectInfo) {
-                    $objectType = $objectInfo.objectClass
-                    $daysSinceCreation = ((Get-Date) - $objectInfo.whenCreated).Days
-                    $daysSinceModification = ((Get-Date) - $objectInfo.whenChanged).Days
-                    $additionalInfo = "Created $daysSinceCreation days ago, last modified $daysSinceModification days ago"
+                    $objectType = if ($objectInfo.objectClass) { 
+                        if ($objectInfo.objectClass -is [Array]) { $objectInfo.objectClass[-1] } else { $objectInfo.objectClass }
+                    } else { "Unknown" }
+                    
+                    if ($objectInfo.whenCreated) {
+                        $whenCreated = if ($objectInfo.whenCreated -is [Array]) { $objectInfo.whenCreated[0] } else { $objectInfo.whenCreated }
+                        $daysSinceCreation = ((Get-Date) - $whenCreated).Days
+                        
+                        $whenChanged = if ($objectInfo.whenChanged) {
+                            if ($objectInfo.whenChanged -is [Array]) { $objectInfo.whenChanged[0] } else { $objectInfo.whenChanged }
+                        } else { $whenCreated }
+                        
+                        $daysSinceModification = ((Get-Date) - $whenChanged).Days
+                        $additionalInfo = "Created $daysSinceCreation days ago, last modified $daysSinceModification days ago"
+                    }
                 }
                 
                 $findings += @{

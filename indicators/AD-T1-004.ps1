@@ -25,19 +25,20 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Load ADSI helper library
+    $helperPath = Join-Path $PSScriptRoot "IronVeil-ADSIHelper.ps1"
+    . $helperPath
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
-    # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
+    # Get domain information using ADSI
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
     
-    # Get the KRBTGT account
-    $krbtgtAccount = Get-ADUser -Identity "krbtgt" -Properties msDS-AllowedToActOnBehalfOfOtherIdentity, whenChanged, PasswordLastSet, Enabled, Description -Server $DomainName
+    # Get the KRBTGT account using ADSI
+    $krbtgtAccount = Get-IVADUser -SamAccountName "krbtgt" -Properties @('msDS-AllowedToActOnBehalfOfOtherIdentity', 'whenChanged', 'pwdLastSet', 'userAccountControl', 'description')
     
     if (-not $krbtgtAccount) {
         throw "Unable to find KRBTGT account in domain $DomainName"
@@ -59,7 +60,7 @@ try {
                     
                     # Try to resolve the SID to a name
                     try {
-                        $principal = Get-ADObject -Filter {objectSID -eq $sid} -Properties samAccountName, distinguishedName
+                        $principal = Search-IVADObjects -Filter "(objectSid=$sid)" -Properties @('samAccountName', 'distinguishedName') | Select-Object -First 1
                         if ($principal) {
                             $allowedPrincipals += @{
                                 Name = $principal.samAccountName
@@ -108,8 +109,11 @@ try {
     # Additional checks for KRBTGT account security
     
     # Check KRBTGT password age
-    if ($krbtgtAccount.PasswordLastSet) {
-        $passwordAge = (Get-Date) - $krbtgtAccount.PasswordLastSet
+    if ($krbtgtAccount.pwdLastSet) {
+        $pwdLastSetValue = if ($krbtgtAccount.pwdLastSet -is [Array]) { $krbtgtAccount.pwdLastSet[0] } else { $krbtgtAccount.pwdLastSet }
+        $passwordLastSet = Convert-IVFileTimeToDateTime -FileTime ([Int64]$pwdLastSetValue)
+        if ($passwordLastSet) {
+            $passwordAge = (Get-Date) - $passwordLastSet
         
         if ($passwordAge.Days -gt 180) {
             # Microsoft recommends changing KRBTGT password periodically
@@ -119,7 +123,7 @@ try {
                 RiskLevel = "High"
                 Description = "KRBTGT account password hasn't been changed in $([int]$passwordAge.Days) days. Old KRBTGT passwords can be exploited for Golden Ticket attacks even after remediation."
                 Remediation = "1. Plan KRBTGT password reset during maintenance window. 2. Reset KRBTGT password twice, waiting 10+ hours between resets. 3. This invalidates any potential Golden Tickets. 4. Document the reset for future reference. 5. Implement regular KRBTGT password rotation policy (every 180 days recommended)."
-                AffectedAttributes = @("PasswordLastSet")
+                AffectedAttributes = @("pwdLastSet")
             }
         }
         elseif ($passwordAge.Hours -lt 24) {
@@ -130,13 +134,15 @@ try {
                 RiskLevel = "High"
                 Description = "KRBTGT account password was changed within the last 24 hours. While this could be legitimate maintenance, it requires verification as it could indicate recent compromise or ongoing incident response."
                 Remediation = "1. Verify this password change was authorized and documented. 2. If unauthorized, treat as active compromise. 3. Check audit logs for who made the change. 4. Ensure proper double-reset procedure was followed if this was remediation."
-                AffectedAttributes = @("PasswordLastSet", "whenChanged")
+                AffectedAttributes = @("pwdLastSet", "whenChanged")
             }
+        }
         }
     }
     
     # Check if KRBTGT is enabled (it should be disabled in most cases)
-    if ($krbtgtAccount.Enabled -eq $true) {
+    $uacValue = if ($krbtgtAccount.userAccountControl -is [Array]) { $krbtgtAccount.userAccountControl[0] } else { $krbtgtAccount.userAccountControl }
+    if (-not (Test-IVUserAccountControl -UAC ([int]$uacValue) -Flag 'ACCOUNTDISABLE')) {
         $findings += @{
             ObjectName = "krbtgt"
             ObjectType = "ServiceAccount"
@@ -149,7 +155,7 @@ try {
     
     # Check for any other accounts with RBCD configured (comprehensive check)
     $filter = "(msDS-AllowedToActOnBehalfOfOtherIdentity=*)"
-    $accountsWithRBCD = Get-ADObject -LDAPFilter $filter -Properties msDS-AllowedToActOnBehalfOfOtherIdentity, samAccountName, objectClass, whenChanged
+    $accountsWithRBCD = Search-IVADObjects -Filter $filter -Properties @('msDS-AllowedToActOnBehalfOfOtherIdentity', 'samAccountName', 'objectClass', 'whenChanged')
     
     foreach ($account in $accountsWithRBCD) {
         # Skip if we already reported on KRBTGT
@@ -168,15 +174,15 @@ try {
         $isPrivileged = $false
         
         # Check if it's a Domain Controller
-        $domainControllers = Get-ADDomainController -Filter * | Select-Object -ExpandProperty Name
-        if ($objType -eq "Computer" -and $domainControllers -contains $account.Name) {
+        $domainControllers = Get-IVADDomainController | Select-Object -ExpandProperty sAMAccountName | ForEach-Object { $_.Replace('$', '') }
+        if ($objType -eq "Computer" -and $domainControllers -contains $account.samAccountName.Replace('$', '')) {
             $riskLevel = "High"
             $isPrivileged = $true
         }
         
         # Check if it's a privileged user/service account
         if ($objType -eq "User") {
-            $user = Get-ADUser -Identity $account.samAccountName -Properties memberOf -ErrorAction SilentlyContinue
+            $user = Get-IVADUser -SamAccountName $account.samAccountName -Properties @('memberOf')
             if ($user.memberOf) {
                 $privilegedGroups = $user.memberOf | Where-Object { 
                     $_ -match "Domain Admins|Enterprise Admins|Schema Admins|Administrators"
@@ -188,7 +194,9 @@ try {
             }
         }
         
-        $daysSinceChange = ((Get-Date) - $account.whenChanged).Days
+        $whenChangedValue = if ($account.whenChanged -is [Array]) { $account.whenChanged[0] } else { $account.whenChanged }
+        $changedDate = Convert-IVFileTimeToDateTime -FileTime ([Int64]$whenChangedValue)
+        $daysSinceChange = if ($changedDate) { ((Get-Date) - $changedDate).Days } else { 0 }
         
         $description = "$objType account has Resource-Based Constrained Delegation configured."
         if ($isPrivileged) {
@@ -259,7 +267,7 @@ try {
         Metadata = @{
             Domain = $DomainName
             ExecutionTime = [Math]::Round($executionTime, 2)
-            KRBTGTPasswordAge = if ($krbtgtAccount.PasswordLastSet) { [int]((Get-Date) - $krbtgtAccount.PasswordLastSet).Days } else { "Unknown" }
+            KRBTGTPasswordAge = if ($krbtgtAccount.pwdLastSet) { $pwdValue = if ($krbtgtAccount.pwdLastSet -is [Array]) { $krbtgtAccount.pwdLastSet[0] } else { $krbtgtAccount.pwdLastSet }; $passwordLastSet = Convert-IVFileTimeToDateTime -FileTime ([Int64]$pwdValue); if ($passwordLastSet) { [int]((Get-Date) - $passwordLastSet).Days } else { "Unknown" } } else { "Unknown" }
             TotalRBCDAccounts = $accountsWithRBCD.Count
             ChecksPerformed = @("KRBTGT RBCD", "KRBTGT Password Age", "KRBTGT Status", "Domain-wide RBCD")
         }

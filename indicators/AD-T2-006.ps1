@@ -25,17 +25,17 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+    # Import IronVeil ADSI Helper
+    . "$PSScriptRoot\IronVeil-ADSIHelper.ps1"
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
     # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
-    $domainSID = $domain.DomainSID.Value
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
+    $domainSID = $domainInfo.DomainSID
     
     # Define privileged groups to check
     $privilegedGroups = @(
@@ -60,13 +60,13 @@ try {
     foreach ($group in $privilegedGroups) {
         try {
             # Get group members recursively
-            $groupMembers = Get-ADGroupMember -Identity $group.SID -Recursive -ErrorAction SilentlyContinue | 
+            $groupMembers = Get-IVADGroupMember -Identity $group.SID -Recursive | 
                             Where-Object { $_.objectClass -eq "user" }
             
             foreach ($member in $groupMembers) {
                 if (-not $privilegedUsers.ContainsKey($member.SamAccountName)) {
                     $privilegedUsers[$member.SamAccountName] = @{
-                        DN = $member.distinguishedName
+                        DN = $member.DistinguishedName
                         Groups = @($group.Name)
                         SID = $member.SID
                     }
@@ -82,14 +82,14 @@ try {
     }
     
     # Also check for users with adminCount=1 (indicates they're protected by AdminSDHolder)
-    $adminCountUsers = Get-ADUser -Filter {adminCount -eq 1} -Properties servicePrincipalName, adminCount, memberOf, passwordLastSet, lastLogonDate, enabled
+    $adminCountUsers = Get-IVADUser -Filter "(adminCount=1)" -Properties @('servicePrincipalName', 'adminCount', 'memberOf', 'pwdLastSet', 'lastLogonTimestamp', 'userAccountControl')
     
     foreach ($user in $adminCountUsers) {
-        if (-not $privilegedUsers.ContainsKey($user.SamAccountName)) {
-            $privilegedUsers[$user.SamAccountName] = @{
+        if (-not $privilegedUsers.ContainsKey($user.sAMAccountName)) {
+            $privilegedUsers[$user.sAMAccountName] = @{
                 DN = $user.DistinguishedName
                 Groups = @("AdminSDHolder-Protected")
-                SID = $user.SID
+                SID = $user.objectSid
             }
         }
     }
@@ -100,75 +100,90 @@ try {
     
     foreach ($userName in $privilegedUsers.Keys) {
         try {
-            $user = Get-ADUser -Identity $userName -Properties servicePrincipalName, passwordLastSet, lastLogonDate, enabled, whenCreated, whenChanged, userAccountControl
+            $user = Get-IVADUser -Filter "(sAMAccountName=$userName)" -Properties @('servicePrincipalName', 'pwdLastSet', 'lastLogonTimestamp', 'userAccountControl', 'whenCreated', 'whenChanged')
             
-            if ($user.servicePrincipalName -and $user.servicePrincipalName.Count -gt 0) {
-                $usersWithSPNs++
+            if ($user -and $user.Count -gt 0) {
+                $user = $user[0]
                 
-                # Determine risk level based on various factors
-                $riskLevel = "High"  # Base risk for privileged account with SPN
-                $riskFactors = @()
-                
-                # Check if account is enabled
-                if ($user.enabled) {
-                    $riskFactors += "Account is enabled"
-                }
-                else {
-                    $riskLevel = "Medium"
-                    $riskFactors += "Account is disabled (lower risk)"
-                }
-                
-                # Check password age
-                if ($user.passwordLastSet) {
-                    $passwordAge = ((Get-Date) - $user.passwordLastSet).Days
-                    if ($passwordAge -gt 365) {
+                if ($user.servicePrincipalName -and $user.servicePrincipalName.Count -gt 0) {
+                    $usersWithSPNs++
+                    
+                    # Determine risk level based on various factors
+                    $riskLevel = "High"  # Base risk for privileged account with SPN
+                    $riskFactors = @()
+                    
+                    # Check if account is enabled
+                    $uac = [int]$user.userAccountControl
+                    $isEnabled = -not ($uac -band 0x2)  # ACCOUNTDISABLE flag
+                    
+                    if ($isEnabled) {
+                        $riskFactors += "Account is enabled"
+                    }
+                    else {
+                        $riskLevel = "Medium"
+                        $riskFactors += "Account is disabled (lower risk)"
+                    }
+                    
+                    # Check password age
+                    if ($user.pwdLastSet) {
+                        $pwdLastSetTime = [DateTime]::FromFileTime([long]$user.pwdLastSet)
+                        $passwordAge = ((Get-Date) - $pwdLastSetTime).Days
+                        if ($passwordAge -gt 365) {
+                            $riskLevel = "Critical"
+                            $riskFactors += "Password not changed for $passwordAge days"
+                        }
+                        elseif ($passwordAge -gt 180) {
+                            $riskFactors += "Password is $passwordAge days old"
+                        }
+                    }
+                    else {
+                        $riskFactors += "Password age unknown"
+                    }
+                    
+                    # Check last logon
+                    if ($user.lastLogonTimestamp) {
+                        $lastLogonTime = [DateTime]::FromFileTime([long]$user.lastLogonTimestamp)
+                        $daysSinceLogon = ((Get-Date) - $lastLogonTime).Days
+                        if ($daysSinceLogon -gt 90) {
+                            $riskFactors += "Inactive for $daysSinceLogon days"
+                        }
+                    }
+                    
+                    # Check for specific high-value groups
+                    $userGroups = $privilegedUsers[$userName].Groups
+                    if ($userGroups -contains "Domain Admins" -or $userGroups -contains "Enterprise Admins") {
                         $riskLevel = "Critical"
-                        $riskFactors += "Password not changed for $passwordAge days"
+                        $riskFactors += "Member of highest privilege groups"
                     }
-                    elseif ($passwordAge -gt 180) {
-                        $riskFactors += "Password is $passwordAge days old"
+                    
+                    # Check if it's a service account (common pattern)
+                    $isLikelyServiceAccount = $false
+                    if ($userName -match "^svc|service|sql|backup|exchange|sharepoint|iis" -or 
+                        $uac -band 0x200000) {  # TRUSTED_TO_AUTHENTICATE_FOR_DELEGATION
+                        $isLikelyServiceAccount = $true
+                        $riskFactors += "Appears to be a service account"
                     }
-                }
-                else {
-                    $riskFactors += "Password age unknown"
-                }
-                
-                # Check last logon
-                if ($user.lastLogonDate) {
-                    $daysSinceLogon = ((Get-Date) - $user.lastLogonDate).Days
-                    if ($daysSinceLogon -gt 90) {
-                        $riskFactors += "Inactive for $daysSinceLogon days"
+                    
+                    # Build SPN list
+                    $spnArray = if ($user.servicePrincipalName -is [array]) { 
+                        $user.servicePrincipalName 
+                    } else { 
+                        @($user.servicePrincipalName) 
                     }
-                }
-                
-                # Check for specific high-value groups
-                $userGroups = $privilegedUsers[$userName].Groups
-                if ($userGroups -contains "Domain Admins" -or $userGroups -contains "Enterprise Admins") {
-                    $riskLevel = "Critical"
-                    $riskFactors += "Member of highest privilege groups"
-                }
-                
-                # Check if it's a service account (common pattern)
-                $isLikelyServiceAccount = $false
-                if ($userName -match "^svc|service|sql|backup|exchange|sharepoint|iis" -or 
-                    $user.userAccountControl -band 0x200000) {  # TRUSTED_TO_AUTHENTICATE_FOR_DELEGATION
-                    $isLikelyServiceAccount = $true
-                    $riskFactors += "Appears to be a service account"
-                }
-                
-                # Build SPN list
-                $spnList = $user.servicePrincipalName -join "; "
-                if ($spnList.Length -gt 200) {
-                    $spnList = $spnList.Substring(0, 200) + "..."
-                }
-                
-                $findings += @{
-                    ObjectName = $userName
-                    ObjectType = "User"
-                    RiskLevel = $riskLevel
-                    Description = "Privileged user has $($user.servicePrincipalName.Count) SPN(s) registered, making it vulnerable to Kerberoasting. Groups: $($userGroups -join ', '). Risk factors: $($riskFactors -join '; '). SPNs: $spnList"
-                    Remediation = "1. If this is a service account, migrate to Group Managed Service Account (gMSA) or Managed Service Account (MSA). 2. If SPNs are not needed, remove them. 3. Ensure strong, unique password (25+ characters). 4. Implement regular password rotation. 5. Monitor for Kerberoasting attacks (Event ID 4769). 6. Consider removing from privileged groups if possible."
-                    AffectedAttributes = @("servicePrincipalName", "memberOf", "passwordLastSet")
+                    
+                    $spnList = $spnArray -join "; "
+                    if ($spnList.Length -gt 200) {
+                        $spnList = $spnList.Substring(0, 200) + "..."
+                    }
+                    
+                    $findings += @{
+                        ObjectName = $userName
+                        ObjectType = "User"
+                        RiskLevel = $riskLevel
+                        Description = "Privileged user has $($spnArray.Count) SPN(s) registered, making it vulnerable to Kerberoasting. Groups: $($userGroups -join ', '). Risk factors: $($riskFactors -join '; '). SPNs: $spnList"
+                        Remediation = "1. If this is a service account, migrate to Group Managed Service Account (gMSA) or Managed Service Account (MSA). 2. If SPNs are not needed, remove them. 3. Ensure strong, unique password (25+ characters). 4. Implement regular password rotation. 5. Monitor for Kerberoasting attacks (Event ID 4769). 6. Consider removing from privileged groups if possible."
+                        AffectedAttributes = @("servicePrincipalName", "memberOf", "passwordLastSet")
+                    }
                 }
             }
         }
@@ -178,7 +193,7 @@ try {
     }
     
     # Also check for any user (not just privileged) with high-value SPNs
-    $allUsersWithSPNs = Get-ADUser -Filter {servicePrincipalName -like "*"} -Properties servicePrincipalName, memberOf, adminCount, passwordLastSet, enabled
+    $allUsersWithSPNs = Get-IVADUser -Filter "(servicePrincipalName=*)" -Properties @('servicePrincipalName', 'memberOf', 'adminCount', 'pwdLastSet', 'userAccountControl')
     
     $highValueSPNPatterns = @(
         "*sql*", "*exchange*", "*sharepoint*", "*adfs*", "*radius*", 
@@ -187,7 +202,7 @@ try {
     
     foreach ($user in $allUsersWithSPNs) {
         # Skip if already reported as privileged
-        if ($privilegedUsers.ContainsKey($user.SamAccountName)) {
+        if ($privilegedUsers.ContainsKey($user.sAMAccountName)) {
             continue
         }
         
@@ -195,7 +210,13 @@ try {
         $hasHighValueSPN = $false
         $matchedServices = @()
         
-        foreach ($spn in $user.servicePrincipalName) {
+        $spnArray = if ($user.servicePrincipalName -is [array]) { 
+            $user.servicePrincipalName 
+        } else { 
+            @($user.servicePrincipalName) 
+        }
+        
+        foreach ($spn in $spnArray) {
             foreach ($pattern in $highValueSPNPatterns) {
                 if ($spn -like $pattern) {
                     $hasHighValueSPN = $true
@@ -208,10 +229,15 @@ try {
         }
         
         if ($hasHighValueSPN) {
-            $passwordAge = if ($user.passwordLastSet) { ((Get-Date) - $user.passwordLastSet).Days } else { "Unknown" }
+            $passwordAge = if ($user.pwdLastSet) { 
+                $pwdLastSetTime = [DateTime]::FromFileTime([long]$user.pwdLastSet)
+                ((Get-Date) - $pwdLastSetTime).Days 
+            } else { 
+                "Unknown" 
+            }
             
             $findings += @{
-                ObjectName = $user.SamAccountName
+                ObjectName = $user.sAMAccountName
                 ObjectType = "User"
                 RiskLevel = "Medium"
                 Description = "Non-privileged user has high-value service SPN(s) for: $($matchedServices -join ', '). While not directly privileged, compromise could lead to service disruption or lateral movement. Password age: $passwordAge days."

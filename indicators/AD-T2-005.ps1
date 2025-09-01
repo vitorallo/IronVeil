@@ -25,18 +25,17 @@ try {
     $startTime = Get-Date
     $findings = @()
     
-    # Import required module
-    Import-Module ActiveDirectory -ErrorAction SilentlyContinue
-    Import-Module GroupPolicy -ErrorAction SilentlyContinue
+    # Import IronVeil ADSI Helper
+    . "$PSScriptRoot\IronVeil-ADSIHelper.ps1"
     
     if (-not $DomainName) {
         throw "Domain name could not be determined"
     }
     
     # Get domain information
-    $domain = Get-ADDomain -Identity $DomainName
-    $domainDN = $domain.DistinguishedName
-    $domainSID = $domain.DomainSID.Value
+    $domainInfo = Get-IVDomainInfo -DomainName $DomainName
+    $domainDN = $domainInfo.DistinguishedName
+    $domainSID = $domainInfo.DomainSID
     
     # Define the GP-Link GUID for linking GPOs
     $gpLinkGuid = "f30e3bbe-9ff0-11d1-b603-0000f80367c1"  # GP-Link extended right
@@ -61,23 +60,23 @@ try {
     )
     
     # Check permissions on the domain object itself
-    $domainACL = Get-Acl "AD:\$domainDN"
+    $domainACL = Get-IVADObjectACL -DistinguishedName $domainDN
     
     # Also check OUs at domain root level
     $criticalOUs = @()
     try {
         # Get Domain Controllers OU
-        $dcOU = Get-ADOrganizationalUnit -Filter {Name -eq "Domain Controllers"} -SearchBase $domainDN -SearchScope OneLevel -ErrorAction SilentlyContinue
-        if ($dcOU) {
+        $dcOU = Get-IVADOrganizationalUnit -Filter "(&(objectClass=organizationalUnit)(name=Domain Controllers))" -SearchBase $domainDN -SearchScope "OneLevel"
+        if ($dcOU -and $dcOU.Count -gt 0) {
             $criticalOUs += @{
                 Name = "Domain Controllers OU"
-                DN = $dcOU.DistinguishedName
+                DN = $dcOU[0].DistinguishedName
                 Critical = $true
             }
         }
         
         # Get other top-level OUs
-        $topLevelOUs = Get-ADOrganizationalUnit -Filter * -SearchBase $domainDN -SearchScope OneLevel -ErrorAction SilentlyContinue
+        $topLevelOUs = Get-IVADOrganizationalUnit -Filter "(objectClass=organizationalUnit)" -SearchBase $domainDN -SearchScope "OneLevel"
         foreach ($ou in $topLevelOUs) {
             if ($ou.Name -ne "Domain Controllers") {
                 $criticalOUs += @{
@@ -190,10 +189,14 @@ try {
                     $principalInfo = $null
                     try {
                         if ($identitySID -match "^S-1-") {
-                            $principalInfo = Get-ADObject -Filter {objectSID -eq $identitySID} -Properties objectClass, memberOf, whenCreated -ErrorAction SilentlyContinue
+                            # Search by SID - need to convert SID to searchable format
+                            $sidBytes = (New-Object System.Security.Principal.SecurityIdentifier($identitySID)).GetBinaryForm()
+                            $hexSid = ($sidBytes | ForEach-Object { "\{0:x2}" -f $_ }) -join ""
+                            $principalInfo = Get-IVADObject -Filter "(objectSID=$hexSid)" -Properties @('objectClass', 'memberOf', 'whenCreated')
                         }
                         else {
-                            $principalInfo = Get-ADObject -Filter {sAMAccountName -eq $identityName.Split('\')[-1]} -Properties objectClass, memberOf, whenCreated -ErrorAction SilentlyContinue
+                            $samName = $identityName.Split('\')[-1]
+                            $principalInfo = Get-IVADObject -Filter "(sAMAccountName=$samName)" -Properties @('objectClass', 'memberOf', 'whenCreated')
                         }
                     }
                     catch {
@@ -234,7 +237,7 @@ try {
     # Check critical OUs
     foreach ($ou in $criticalOUs) {
         try {
-            $ouACL = Get-Acl "AD:\$($ou.DN)"
+            $ouACL = Get-IVADObjectACL -DistinguishedName $ou.DN
             $ouUnauthorized = Check-GPOLinkingPermissions -ACL $ouACL -ObjectName $ou.Name -ObjectType "OrganizationalUnit" -IsCritical $ou.Critical
             
             foreach ($principal in $ouUnauthorized) {
@@ -257,7 +260,7 @@ try {
     # Check for users who can create GPOs (different but related permission)
     try {
         $gpContainer = "CN=Policies,CN=System,$domainDN"
-        $gpContainerACL = Get-Acl "AD:\$gpContainer"
+        $gpContainerACL = Get-IVADObjectACL -DistinguishedName $gpContainer
         
         foreach ($ace in $gpContainerACL.Access) {
             if ($ace.AccessControlType -eq "Allow" -and 
