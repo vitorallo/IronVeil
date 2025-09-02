@@ -408,8 +408,8 @@ public partial class MainWindow : Window
             else
             {
                 // Calculate estimated time based on selected rules (assuming ~15 seconds average per rule)
-                var estimatedSeconds = executableRules * 15;
-                var estimatedMinutes = Math.Max(1, estimatedSeconds / 60);
+                var estimatedSeconds = (long)executableRules * 15;
+                var estimatedMinutes = Math.Max(1, (int)(estimatedSeconds / 60));
                 EstimatedTimeText.Text = $"Est. time: {estimatedMinutes}-{estimatedMinutes + 2} minutes";
             }
 
@@ -1082,7 +1082,7 @@ public partial class MainWindow : Window
             
             // Calculate and display time information
             var elapsed = DateTime.Now - _scanStartTime;
-            var estimatedTotal = elapsed.TotalSeconds * e.TotalRules / Math.Max(e.CompletedRules, 1);
+            var estimatedTotal = elapsed.TotalSeconds * (double)e.TotalRules / Math.Max(e.CompletedRules, 1.0);
             var remaining = TimeSpan.FromSeconds(Math.Max(0, estimatedTotal - elapsed.TotalSeconds));
             
             if (remaining.TotalMinutes > 1)

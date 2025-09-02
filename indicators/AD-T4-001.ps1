@@ -90,7 +90,7 @@ try {
         
     } catch {
         $ignoredCount++
-        Write-Warning "Could not retrieve Administrator account with SID $adminSID: $_"
+        Write-Warning "Could not retrieve Administrator account with SID ${adminSID}: ${_}"
     }
     
     # Check for other domains in the forest

@@ -51,9 +51,9 @@ try {
     
     foreach ($account in $unconstrainedAccounts) {
         $objType = switch ($account.objectClass) {
-            "computer" { "Computer" }
-            "user" { "User" }
-            default { "Object" }
+            "computer" { [string]"Computer" }
+            "user" { [string]"User" }
+            default { [string]"Object" }
         }
         
         # Check if this is a Domain Controller (expected to have unconstrained delegation)
@@ -70,7 +70,7 @@ try {
             # Still report it but at lower risk
             $findings += @{
                 ObjectName = $account.samAccountName
-                ObjectType = "DomainController"
+                ObjectType = [string]"DomainController"
                 RiskLevel = "Low"
                 Description = "Domain Controller has unconstrained delegation (this is expected behavior). While normal, ensure the DC is properly secured as compromise would allow ticket harvesting."
                 Remediation = "1. This is expected for Domain Controllers. 2. Ensure DCs are properly hardened. 3. Monitor DC access closely. 4. Implement credential guard where possible. 5. Restrict physical and network access to DCs."
@@ -157,7 +157,7 @@ try {
             
             $findings += @{
                 ObjectName = $account.samAccountName
-                ObjectType = $objType
+                ObjectType = [string]$objType
                 RiskLevel = $riskLevel
                 Description = $description
                 Remediation = $remediation
@@ -172,7 +172,7 @@ try {
     if ($krbtgtAccount -and (([int]$krbtgtUacValue) -band 0x80000)) {
         $findings += @{
             ObjectName = "krbtgt"
-            ObjectType = "ServiceAccount"
+            ObjectType = [string]"ServiceAccount"
             RiskLevel = "Critical"
             Description = "CATASTROPHIC: KRBTGT account has unconstrained delegation! This should NEVER occur and indicates severe compromise."
             Remediation = "1. IMMEDIATE ACTION REQUIRED. 2. Remove unconstrained delegation from KRBTGT. 3. Reset KRBTGT password TWICE. 4. Consider entire domain compromised. 5. Initiate full incident response. 6. Audit all Kerberos tickets."
@@ -192,14 +192,14 @@ try {
         }
         
         $objType = switch ($account.objectClass) {
-            "computer" { "Computer" }
-            "user" { "User" }
-            default { "Object" }
+            "computer" { [string]"Computer" }
+            "user" { [string]"User" }
+            default { [string]"Object" }
         }
         
         $findings += @{
             ObjectName = $account.samAccountName
-            ObjectType = $objType
+            ObjectType = [string]$objType
             RiskLevel = "High"
             Description = "$objType account has unusual combination of SERVER_TRUST_ACCOUNT and TRUSTED_FOR_DELEGATION flags. This might be an attempt to hide unconstrained delegation."
             Remediation = "1. Investigate this unusual configuration. 2. Review the account's purpose and permissions. 3. Consider removing delegation permissions. 4. Monitor for suspicious activity."

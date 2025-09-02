@@ -154,7 +154,7 @@ try {
             
         } catch {
             $ignoredCount++
-            Write-Warning "Could not check event logs on $dcName: $_"
+            Write-Warning "Could not check event logs on ${dcName}: ${_}"
         }
     }
     

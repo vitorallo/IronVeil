@@ -193,7 +193,7 @@ try {
                     
                 } catch {
                     $ignoredCount++
-                    Write-Warning "Could not check permissions on $folder: $_"
+                    Write-Warning "Could not check permissions on ${folder}: ${_}"
                 }
             }
             
@@ -246,7 +246,7 @@ try {
             
         } catch {
             $ignoredCount++
-            Write-Warning "Could not check SYSVOL on $dcName: $_"
+            Write-Warning "Could not check SYSVOL on ${dcName}: ${_}"
         }
     }
     

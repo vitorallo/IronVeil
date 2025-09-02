@@ -253,7 +253,7 @@ try {
             
         } catch {
             $ignoredCount++
-            Write-Warning "Could not check user $userDN: $_"
+            Write-Warning "Could not check user ${userDN}: ${_}"
         }
     }
     

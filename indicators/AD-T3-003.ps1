@@ -40,12 +40,7 @@ try {
     
     # Check for inactive user accounts
     try {
-        $inactiveUsers = Get-ADUser -Filter {
-            (LastLogonTimestamp -lt $inactiveDate -or LastLogonTimestamp -notlike "*") -and
-            Enabled -eq $true -and
-            Name -notlike "*svc*" -and
-            Name -notlike "*service*"
-        } -Properties LastLogonTimestamp, LastLogonDate, whenCreated, PasswordLastSet, memberOf -Server $DomainName -ErrorAction Stop
+        $inactiveUsers = Get-ADUser -Filter "((LastLogonTimestamp -lt '$($inactiveDate.ToFileTime())' -or LastLogonTimestamp -notlike '*') -and Enabled -eq 'true' -and Name -notlike '*svc*' -and Name -notlike '*service*')" -Properties LastLogonTimestamp, LastLogonDate, whenCreated, PasswordLastSet, memberOf -Server $DomainName -ErrorAction Stop
         
         foreach ($user in $inactiveUsers) {
             $lastLogon = if ($user.LastLogonTimestamp) {
@@ -108,10 +103,7 @@ try {
     
     # Check for inactive computer accounts
     try {
-        $inactiveComputers = Get-ADComputer -Filter {
-            (LastLogonTimestamp -lt $inactiveDate -or LastLogonTimestamp -notlike "*") -and
-            Enabled -eq $true
-        } -Properties LastLogonTimestamp, LastLogonDate, whenCreated, OperatingSystem, PasswordLastSet -Server $DomainName -ErrorAction Stop
+        $inactiveComputers = Get-ADComputer -Filter "((LastLogonTimestamp -lt '$($inactiveDate.ToFileTime())' -or LastLogonTimestamp -notlike '*') -and Enabled -eq 'true')" -Properties LastLogonTimestamp, LastLogonDate, whenCreated, OperatingSystem, PasswordLastSet -Server $DomainName -ErrorAction Stop
         
         foreach ($computer in $inactiveComputers) {
             $lastLogon = if ($computer.LastLogonTimestamp) {

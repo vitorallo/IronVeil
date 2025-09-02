@@ -200,7 +200,7 @@ try {
             
         } catch {
             $ignoredCount++
-            Write-Warning "Could not check DNS configuration on $dcName: $_"
+            Write-Warning "Could not check DNS configuration on ${dcName}: ${_}"
         }
     }
     

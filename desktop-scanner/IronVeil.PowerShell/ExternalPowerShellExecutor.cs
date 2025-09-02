@@ -187,7 +187,7 @@ public class ExternalPowerShellExecutor : IPowerShellExecutor
                         var result = await ExecuteRuleInternalAsync(rule.RuleId, rule.RulePath, cancellationToken);
                         
                         Interlocked.Increment(ref completedRules);
-                        var progress = (completedRules * 100) / totalRules;
+                        var progress = (double)completedRules * 100.0 / totalRules;
                         
                         ProgressChanged?.Invoke(this, new ScanProgressEventArgs
                         {

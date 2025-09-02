@@ -110,7 +110,7 @@ try {
         
     } catch {
         $ignoredCount++
-        Write-Warning "Could not retrieve Guest account with SID $guestSID: $_"
+        Write-Warning "Could not retrieve Guest account with SID ${guestSID}: ${_}"
     }
     
     # Check for other domains in the forest
