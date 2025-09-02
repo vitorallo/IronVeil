@@ -1,0 +1,671 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-09-01T00:00:00Z",
+  "description": "IronVeil Security Rule Manifest - Defines rule organization, tiers, and scan profiles",
+  
+  "profiles": {
+    "minimal": {
+      "name": "Essential Checks",
+      "description": "Critical security checks only (Tier 1)",
+      "tiers": ["T1"],
+      "estimatedRules": 8,
+      "estimatedTime": "2-5 minutes"
+    },
+    "recommended": {
+      "name": "Recommended Security Assessment",
+      "description": "Critical and high-impact checks (Tiers 1-2)",
+      "tiers": ["T1", "T2"],
+      "estimatedRules": 22,
+      "estimatedTime": "5-15 minutes"
+    },
+    "full": {
+      "name": "Comprehensive Security Audit",
+      "description": "Complete security assessment (All tiers)",
+      "tiers": ["T1", "T2", "T3", "T4"],
+      "estimatedRules": 51,
+      "estimatedTime": "20-40 minutes"
+    }
+  },
+  
+  "tiers": {
+    "T1": {
+      "name": "Critical",
+      "description": "Domain/tenant compromise risks",
+      "weight": 100,
+      "color": "#DC2626",
+      "priority": 1
+    },
+    "T2": {
+      "name": "High", 
+      "description": "Privilege escalation vectors",
+      "weight": 75,
+      "color": "#EA580C",
+      "priority": 2
+    },
+    "T3": {
+      "name": "Medium",
+      "description": "Attack surface expansion",
+      "weight": 50,
+      "color": "#F59E0B", 
+      "priority": 3
+    },
+    "T4": {
+      "name": "Low",
+      "description": "Basic security hygiene",
+      "weight": 25,
+      "color": "#22C55E",
+      "priority": 4
+    }
+  },
+  
+  "categories": {
+    "PersistenceAndBackdoor": "Persistent access and backdoor mechanisms",
+    "PrivilegedAccess": "Privileged account and access management",
+    "Authentication": "Authentication mechanisms and policies", 
+    "Authorization": "Authorization and permission controls",
+    "CertificateServices": "PKI and certificate-based security",
+    "NetworkSecurity": "Network-level security controls",
+    "AuditAndLogging": "Audit trails and logging mechanisms",
+    "ConfigurationSecurity": "Security configuration and hardening",
+    "IdentityCorrelation": "Cross-environment identity relationships",
+    "SystemTest": "System testing and pipeline verification"
+  },
+  
+  "rules": {
+    "AD-T1-001": {
+      "name": "Evidence of Mimikatz DCShadow Attack",
+      "tier": "T1",
+      "category": "PersistenceAndBackdoor",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 30,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T1-002": {
+      "name": "Well-known Privileged SIDs in SIDHistory",
+      "tier": "T1", 
+      "category": "PersistenceAndBackdoor",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 25,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T1-003": {
+      "name": "Zerologon Vulnerability (CVE-2020-1472)",
+      "tier": "T1",
+      "category": "Authentication", 
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T1-004": {
+      "name": "KRBTGT Account with Resource-Based Constrained Delegation",
+      "tier": "T1",
+      "category": "Authentication",
+      "environment": "ActiveDirectory", 
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T1-005": {
+      "name": "Constrained Delegation to KRBTGT",
+      "tier": "T1",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T1-006": {
+      "name": "Unconstrained Delegation on Any Account",
+      "tier": "T1",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    
+    "AD-T2-001": {
+      "name": "Weak ACLs with DCSync Rights",
+      "tier": "T2",
+      "category": "PrivilegedAccess",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 35,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T2-002": {
+      "name": "Certificate Templates with Insecure Configurations",
+      "tier": "T2",
+      "category": "CertificateServices",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 40,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T2-003": {
+      "name": "Print Spooler Enabled on Domain Controllers",
+      "tier": "T2",
+      "category": "NetworkSecurity",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T2-004": {
+      "name": "Reversible Passwords in Group Policy Objects",
+      "tier": "T2",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 25,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T2-005": {
+      "name": "GPO Linking Delegation at Domain Level",
+      "tier": "T2",
+      "category": "Authorization",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 30,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T2-006": {
+      "name": "Privileged Users with Service Principal Names",
+      "tier": "T2",
+      "category": "PrivilegedAccess",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T2-007": {
+      "name": "Users with Kerberos Pre-Authentication Disabled",
+      "tier": "T2",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T2-008": {
+      "name": "Old KRBTGT Password",
+      "tier": "T2",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    
+    "EID-T1-001": {
+      "name": "Risky API Permissions Granted to Applications",
+      "tier": "T1",
+      "category": "PrivilegedAccess",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 30,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T1-002": {
+      "name": "Cross-Environment Privileged Account Overlap",
+      "tier": "T1",
+      "category": "IdentityCorrelation",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 25,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    
+    "EID-T2-001": {
+      "name": "Lack of Multi-Factor Authentication for Privileged Accounts",
+      "tier": "T2",
+      "category": "Authentication",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T2-002": {
+      "name": "Unrestricted User Consent for Applications",
+      "tier": "T2",
+      "category": "Authorization",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T2-003": {
+      "name": "Legacy Authentication Protocols Allowed",
+      "tier": "T2",
+      "category": "Authentication",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T2-004": {
+      "name": "Guest Accounts in Privileged Groups",
+      "tier": "T2",
+      "category": "PrivilegedAccess",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    
+    "AD-T3-001": {
+      "name": "Legacy Authentication Protocols Enabled",
+      "tier": "T3",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-002": {
+      "name": "Weak Password Policies",
+      "tier": "T3",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-003": {
+      "name": "Stale or Inactive Accounts",
+      "tier": "T3",
+      "category": "IdentityCorrelation",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 30,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-004": {
+      "name": "LDAP Signing Not Required",
+      "tier": "T3",
+      "category": "NetworkSecurity",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-005": {
+      "name": "Built-in Operator Groups Not Empty",
+      "tier": "T3",
+      "category": "PrivilegedAccess",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-006": {
+      "name": "Privileged Objects with Unprivileged Owners",
+      "tier": "T3",
+      "category": "Authorization",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 25,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-007": {
+      "name": "Machine Account Quota Greater Than Zero",
+      "tier": "T3",
+      "category": "ConfigurationSecurity",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-008": {
+      "name": "Resource-Based Constrained Delegation on Computer Objects",
+      "tier": "T3",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 30,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-009": {
+      "name": "RC4 Encryption Type Supported by Domain Controllers",
+      "tier": "T3",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-010": {
+      "name": "Weak Certificate Cryptography",
+      "tier": "T3",
+      "category": "CertificateServices",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 35,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-011": {
+      "name": "Service Principal Name Misconfigurations",
+      "tier": "T3",
+      "category": "Authentication",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 25,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-012": {
+      "name": "Privileged Account Management Issues",
+      "tier": "T3",
+      "category": "PrivilegedAccess",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-013": {
+      "name": "Misconfigured Group Policy Objects",
+      "tier": "T3",
+      "category": "ConfigurationSecurity",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 40,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T3-014": {
+      "name": "AdminSDHolder Object Permission Changes",
+      "tier": "T3",
+      "category": "Authorization",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    
+    "AD-T4-001": {
+      "name": "Default Domain Administrator Account Not Renamed",
+      "tier": "T4",
+      "category": "ConfigurationSecurity",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 5,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T4-002": {
+      "name": "Guest Account Not Disabled",
+      "tier": "T4",
+      "category": "ConfigurationSecurity",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 5,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T4-003": {
+      "name": "Domain Controller Event Log Retention Too Short",
+      "tier": "T4",
+      "category": "AuditAndLogging",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": true,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T4-004": {
+      "name": "Backup Operators Group Contains User Accounts",
+      "tier": "T4",
+      "category": "PrivilegedAccess",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T4-005": {
+      "name": "Domain Controller DNS Configuration Issues",
+      "tier": "T4",
+      "category": "NetworkSecurity",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "AD-T4-006": {
+      "name": "Insecure SYSVOL Share Permissions",
+      "tier": "T4",
+      "category": "Authorization",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ADSIHelper.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    
+    "TEST-001": {
+      "name": "PowerShell Pipeline Test Rule",
+      "tier": "T4",
+      "category": "SystemTest",
+      "environment": "ActiveDirectory",
+      "requiresAuthentication": false,
+      "requiresAdmin": false,
+      "dependencies": [],
+      "estimatedTime": 1,
+      "frameworks": ["Test"]
+    },
+    
+    "EID-T3-001": {
+      "name": "Administrative Units Not Being Used",
+      "tier": "T3",
+      "category": "Authorization",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T3-002": {
+      "name": "Security Defaults Not Enabled",
+      "tier": "T3",
+      "category": "ConfigurationSecurity",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T3-003": {
+      "name": "Guests Having Permissions to Invite Other Guests",
+      "tier": "T3",
+      "category": "Authorization",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T3-004": {
+      "name": "Non-Admin Users Can Register Applications",
+      "tier": "T3",
+      "category": "Authorization",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    
+    "EID-T4-001": {
+      "name": "Default Global Administrator Account Still Active",
+      "tier": "T4",
+      "category": "ConfigurationSecurity",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T4-002": {
+      "name": "Users Can Create Microsoft 365 Groups",
+      "tier": "T4",
+      "category": "Authorization",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T4-003": {
+      "name": "Password Protection Not Configured",
+      "tier": "T4",
+      "category": "Authentication",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 15,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T4-004": {
+      "name": "Self-Service Password Reset Not Enabled",
+      "tier": "T4",
+      "category": "Authentication",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 10,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T4-005": {
+      "name": "LinkedIn Account Connections Enabled",
+      "tier": "T4",
+      "category": "ConfigurationSecurity",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 5,
+      "frameworks": ["MITRE", "NIST"]
+    },
+    "EID-T4-006": {
+      "name": "Directory Synchronization Errors Present",
+      "tier": "T4",
+      "category": "ConfigurationSecurity",
+      "environment": "EntraID",
+      "requiresAuthentication": true,
+      "requiresAdmin": false,
+      "dependencies": ["IronVeil-ConnectEntraID.ps1"],
+      "estimatedTime": 20,
+      "frameworks": ["MITRE", "NIST"]
+    }
+  },
+  
+  "helperScripts": {
+    "IronVeil-ADSIHelper.ps1": {
+      "description": "ADSI helper functions for Active Directory queries",
+      "environment": "ActiveDirectory",
+      "required": true
+    },
+    "IronVeil-ConnectEntraID.ps1": {
+      "description": "Entra ID authentication and connection helper",
+      "environment": "EntraID", 
+      "required": true
+    }
+  },
+  
+  "prerequisites": {
+    "ActiveDirectory": {
+      "powershellModules": [],
+      "systemRequirements": ["Domain-joined machine or network connectivity to domain controllers"],
+      "permissions": ["Network access to domain controllers", "Basic user rights for LDAP queries"]
+    },
+    "EntraID": {
+      "powershellModules": ["Microsoft.Graph"],
+      "systemRequirements": ["Internet connectivity", "PowerShell 5.1 or higher"],
+      "permissions": ["User consent for Microsoft Graph API permissions"]
+    }
+  }
+}

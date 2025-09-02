@@ -137,3 +137,10 @@ nul
 # Claude Code specific
 .claude/settings.local.json
 .claude/shell-snapshots/
+
+# IronVeil session logs
+session_*_log.txt
+**/session_*_log.txt
+
+# IronVeil scan results (optional - uncomment if you don't want to commit scan results)
+# IronVeil_Scan_*.json

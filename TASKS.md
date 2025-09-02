@@ -9,6 +9,8 @@
   - **Phase 4.2**: ✅ COMPLETED - NestJS Backend API Development (August 31, 2025)
   - **Phase 4.3**: ✅ COMPLETED - Frontend-Database Integration (August 31, 2025)
   - **Phase 4.4**: ✅ COMPLETED - Development Environment & Testing Framework (August 31, 2025)
+  - **Phase 4.5**: ✅ COMPLETED - ADSI Conversion for 100% RSAT-Free Operation (September 1, 2025)
+  - **Phase 4.6**: ✅ COMPLETED - Entra ID Authentication Helper (September 1, 2025)
 
 ## Overview
 Development approach: **Minimal desktop scanner + Full-featured cloud backend**
@@ -214,7 +216,53 @@ Development approach: **Minimal desktop scanner + Full-featured cloud backend**
   - Database: Multi-tenant RLS policies with organization-level data isolation
 - [x] **Integration Checkpoint**: Complete development environment with working dashboard and API ✅
 
-### 4.5 Multi-Tenant Organization Management **[webapp-coder-expert + supabase-integration-specialist]**
+### 4.5 ADSI Conversion for 100% RSAT-Free Operation **[powershell-security-rules-developer]** ✅ COMPLETED
+**🪟 Development Environment: SECONDARY (Windows) - PowerShell + Active Directory development**
+**Completed**: September 1, 2025 | **Duration**: ~8 hours | **Report**: `/development_reports/ADSI-Conversion-Complete-Summary.md`
+- [x] **Conversion Scope**: Converted 15 security rules from ActiveDirectory module to pure ADSI
+  - 6 Critical rules (AD-T1 series): Mimikatz, SIDHistory, Zerologon, KRBTGT attacks
+  - 8 High severity rules (AD-T2 series): DCSync, Kerberoasting, AS-REP Roasting
+  - 1 Cross-environment rule (EID-T1-002): Privileged account overlap detection
+- [x] **IronVeil-ADSIHelper.ps1**: Extended helper library with 20+ reusable ADSI functions
+  - Domain operations: Get-IVDomainInfo, Get-IVDomainACL, password policies
+  - Object queries: Search-IVADObjects, Get-IVADUser, Get-IVADComputer, Get-IVADGroup
+  - Security features: ACL retrieval, certificate templates, UserAccountControl testing
+  - Group Policy: Get-IVGPO, Get-IVGPOLink for GPO analysis
+- [x] **Testing Infrastructure**: Created debugging tools for rule development
+  - Simple-Debug.ps1: Individual rule testing with execution timing
+  - Simple-AD-Test.ps1: AD connectivity and environment verification
+  - Verify-RSAT-Free.ps1: Validation script confirming zero RSAT dependencies
+- [x] **Business Impact**: Eliminated biggest adoption barrier
+  - Before: 500MB+ RSAT installation, admin rights required, 15-30 min setup
+  - After: Zero dependencies, instant deployment, works on any domain-joined Windows
+  - Average execution time: 312ms per rule (excellent performance)
+- [x] **Integration Checkpoint**: IronVeil is 100% standalone for AD security assessments ✅
+
+### 4.6 Entra ID Authentication Helper **[powershell-security-rules-developer]** ✅ COMPLETED
+**🪟 Development Environment: SECONDARY (Windows) - PowerShell + Microsoft Graph integration**
+**Completed**: September 1, 2025 | **Duration**: ~2 hours | **Report**: Simplified authentication for one-time scans
+- [x] **IronVeil-ConnectEntraID.ps1**: Comprehensive connection helper for Entra ID assessments
+  - Consolidated all 12 required Microsoft Graph permissions across 16 EID rules
+  - Single command authentication: Connect-IronVeilEntraID
+  - Module installation helper: Install-IronVeilGraphModule
+  - Connection testing: Test-IronVeilEntraIDConnection
+- [x] **Permission Management**: Documented and streamlined Graph API requirements
+  - Directory.Read.All, User.Read.All, Application.Read.All
+  - Policy.Read.All, AuditLog.Read.All, Reports.Read.All
+  - RoleManagement permissions, UserAuthenticationMethod.Read.All
+  - AdministrativeUnit.Read.All, SecurityEvents.Read.All, Group.Read.All
+- [x] **User Experience Improvements**:
+  - Clear guidance for Microsoft.Graph module installation (~150MB)
+  - Automated permission scope collection for all EID rules
+  - Connection status verification with missing permission detection
+  - Professional banner and command documentation
+- [x] **Architecture Decision**: Maintained Microsoft.Graph module approach
+  - Evaluated service principal approach (Semperis style) vs interactive auth
+  - Chose simplicity for one-time scans over automation complexity
+  - Perfect fit for IronVeil's consultant/auditor use case
+- [x] **Integration Checkpoint**: Entra ID authentication streamlined for security assessments ✅
+
+### 4.7 Multi-Tenant Organization Management **[webapp-coder-expert + supabase-integration-specialist]**
 **🖥️ Development Environment: PRIMARY (Mac) - Database + frontend integration**
 - [ ] Implement organization creation and tier management
 - [ ] Create user invitation and role assignment system
@@ -223,7 +271,7 @@ Development approach: **Minimal desktop scanner + Full-featured cloud backend**
 - [ ] Create audit logs for compliance and monitoring
 - [ ] **Integration Checkpoint**: Multiple organizations can operate independently
 
-### 4.6 EASM Provider Integration Framework **[api-integration-developer]**
+### 4.8 EASM Provider Integration Framework **[api-integration-developer]**
 **🖥️ Development Environment: PRIMARY (Mac) - API development + third-party integrations**
 - [ ] Design modular connector architecture for third-party platforms
 - [ ] Implement bulk data export APIs with pagination
@@ -421,6 +469,14 @@ Development approach: **Minimal desktop scanner + Full-featured cloud backend**
     - Local Supabase development environment with hot reload
     - Database seeding with realistic security scan data for testing
     - Comprehensive E2E testing framework with authentication flows
+  - **Phase 4.5**: ✅ ADSI Conversion: 100% RSAT-free operation achieved (COMPLETED)
+    - 15 AD security rules converted to pure ADSI implementation
+    - IronVeil-ADSIHelper.ps1 library with 20+ reusable functions
+    - Zero dependencies for AD assessments - truly standalone
+  - **Phase 4.6**: ✅ Entra ID Authentication: Streamlined Graph connection (COMPLETED)
+    - IronVeil-ConnectEntraID.ps1 simplifies authentication
+    - Single command for all 12 required permissions
+    - Perfect for one-time security assessments
 - **Phase 5**: Desktop scanner user experience and scan processing (NEXT)
 - **Phase 6**: Advanced analytics and enterprise features
 - **Current Achievement**: Complete development environment: dashboard → database → API → testing framework

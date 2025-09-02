@@ -9,7 +9,7 @@ namespace IronVeil.Core.Services;
 
 public interface ISystemRequirementsService
 {
-    Task<SystemRequirements> CheckRequirementsAsync();
+    Task<SystemRequirements> CheckRequirementsAsync(CancellationToken cancellationToken = default);
     Task<List<string>> GetAvailableDomainsAsync();
     Task<string?> GetCurrentDomainAsync();
 }
@@ -23,12 +23,13 @@ public class SystemRequirementsService : ISystemRequirementsService
         _logger = logger;
     }
 
-    public async Task<SystemRequirements> CheckRequirementsAsync()
+    public async Task<SystemRequirements> CheckRequirementsAsync(CancellationToken cancellationToken = default)
     {
         var requirements = new SystemRequirements();
         
         await Task.Run(() =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
             // Check PowerShell availability
             requirements.PowerShellAvailable = CheckPowerShellAvailable();
             requirements.PowerShellVersion = GetPowerShellVersion();

@@ -182,36 +182,62 @@
                 
                 <!-- Authentication Status -->
                 <Border Grid.Row="1" Background="White" CornerRadius="8" Padding="15" Margin="0,0,0,10">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Authentication" FontWeight="SemiBold" FontSize="16" Foreground="#1E293B" Margin="0,0,0,15"/>
                         
-                        <Ellipse Grid.Column="0" Width="12" Height="12" Margin="0,0,10,0">
-                            <Ellipse.Style>
-                                <Style TargetType="Ellipse">
-                                    <Setter Property="Fill" Value="#EF4444"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
-                                            <Setter Property="Fill" Value="#10B981"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Ellipse.Style>
-                        </Ellipse>
+                        <!-- Backend Authentication -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Ellipse Grid.Column="0" Width="12" Height="12" Margin="0,0,10,0">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="#EF4444"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
+                                                <Setter Property="Fill" Value="#10B981"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Name="AuthStatusText" Text="Backend: Not Authenticated" FontWeight="SemiBold" Foreground="#1E293B"/>
+                                <TextBlock Name="AuthUserText" Text="Login to upload results to cloud dashboard" FontSize="12" Foreground="#94A3B8"/>
+                            </StackPanel>
+                            
+                            <Button Grid.Column="2" Name="LoginButton" Content="Login" 
+                                    Style="{StaticResource PrimaryButton}" 
+                                    Width="100"
+                                    Click="LoginButton_Click"/>
+                        </Grid>
                         
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Name="AuthStatusText" Text="Not Authenticated" FontWeight="SemiBold" Foreground="#1E293B"/>
-                            <TextBlock Name="AuthUserText" Text="Please login to continue" FontSize="12" Foreground="#94A3B8"/>
-                        </StackPanel>
-                        
-                        <Button Grid.Column="2" Name="LoginButton" Content="Login" 
-                                Style="{StaticResource PrimaryButton}" 
-                                Width="100"
-                                Click="LoginButton_Click"/>
-                    </Grid>
+                        <!-- Entra ID Authentication -->
+                        <Grid Margin="0,5,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Ellipse Grid.Column="0" Width="12" Height="12" Margin="0,0,10,0" Name="EntraIDStatusIndicator" Fill="#94A3B8"/>
+                            
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Name="EntraIDStatusText" Text="Entra ID: Not Connected" FontWeight="SemiBold" Foreground="#1E293B"/>
+                                <TextBlock Name="EntraIDUserText" Text="Connect to run Entra ID security checks" FontSize="12" Foreground="#94A3B8"/>
+                            </StackPanel>
+                            
+                            <Button Grid.Column="2" Name="ConnectEntraIDButton" Content="Connect" 
+                                    Style="{StaticResource SecondaryButton}" 
+                                    Width="100"
+                                    Click="ConnectEntraIDButton_Click"/>
+                        </Grid>
+                    </StackPanel>
                 </Border>
                 
                 <!-- Scan Configuration and Actions -->
@@ -227,19 +253,42 @@
                             
                             <StackPanel Grid.Column="0" Margin="0,0,10,0">
                                 <CheckBox Name="ScanADCheckbox" Content="Active Directory" IsChecked="True" Margin="0,5"/>
-                                <CheckBox Name="ScanEntraCheckbox" Content="Microsoft Entra ID" IsChecked="True" Margin="0,5"/>
-                                <CheckBox Name="ScanHybridCheckbox" Content="Hybrid Identity Correlation" IsChecked="True" Margin="0,5"/>
+                                <CheckBox Name="ScanEntraCheckbox" Content="Microsoft Entra ID" IsChecked="False" Margin="0,5"/>
+                                <CheckBox Name="ScanHybridCheckbox" Content="Hybrid Identity Correlation" IsChecked="False" Margin="0,5"/>
+                                
+                                <TextBlock Name="RuleCountPreview" Text="Estimated rules: 30" FontSize="11" Foreground="#94A3B8" Margin="0,5,0,0"/>
                             </StackPanel>
                             
                             <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                                <TextBlock Text="Scan Depth:" Margin="0,0,0,5" Foreground="#64748B"/>
-                                <ComboBox Name="ScanDepthSelector" SelectedIndex="1">
-                                    <ComboBoxItem>Quick (Essential checks only)</ComboBoxItem>
-                                    <ComboBoxItem>Standard (Recommended)</ComboBoxItem>
-                                    <ComboBoxItem>Deep (All security checks)</ComboBoxItem>
+                                <TextBlock Text="Scan Profile:" Margin="0,0,0,5" Foreground="#64748B"/>
+                                <ComboBox Name="ScanProfileSelector" SelectedIndex="1" SelectionChanged="ScanProfileSelector_SelectionChanged">
+                                    <ComboBoxItem Tag="minimal">Minimal (Critical checks only)</ComboBoxItem>
+                                    <ComboBoxItem Tag="recommended">Recommended (Critical + High impact)</ComboBoxItem>
+                                    <ComboBoxItem Tag="full">Complete (All security checks)</ComboBoxItem>
+                                    <ComboBoxItem Tag="custom">Custom Selection</ComboBoxItem>
                                 </ComboBox>
+                                
+                                <TextBlock Name="EstimatedTimeText" Text="Est. time: 5-15 minutes" FontSize="11" Foreground="#94A3B8" Margin="0,5,0,0"/>
                             </StackPanel>
                         </Grid>
+                        
+                        <!-- Tier Selection (shown for custom profile) -->
+                        <StackPanel Name="TierSelectionPanel" Visibility="Collapsed" Margin="0,10,0,0">
+                            <TextBlock Text="Security Check Tiers:" Margin="0,0,0,5" Foreground="#64748B"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <CheckBox Grid.Column="0" Name="Tier1Checkbox" Content="Tier 1 (Critical)" IsChecked="True" Foreground="#DC2626" FontWeight="SemiBold"/>
+                                <CheckBox Grid.Column="1" Name="Tier2Checkbox" Content="Tier 2 (High)" IsChecked="True" Foreground="#EA580C" FontWeight="SemiBold"/>
+                                <CheckBox Grid.Column="2" Name="Tier3Checkbox" Content="Tier 3 (Medium)" IsChecked="False" Foreground="#F59E0B" FontWeight="SemiBold"/>
+                                <CheckBox Grid.Column="3" Name="Tier4Checkbox" Content="Tier 4 (Low)" IsChecked="False" Foreground="#22C55E" FontWeight="SemiBold"/>
+                            </Grid>
+                        </StackPanel>
                         
                         <!-- Action Buttons -->
                         <Grid Margin="0,15,0,0">
@@ -270,11 +319,32 @@
                         
                         <!-- Scan Progress (shown during scan) -->
                         <StackPanel Name="ProgressPanel" Visibility="Collapsed" Margin="0,15,0,0">
-                            <ProgressBar Name="ScanProgressBar" Height="6" Maximum="100" Value="0" Margin="0,0,0,5"/>
-                            <TextBlock Name="ProgressStatusText" Text="Initializing scanner..." 
-                                     HorizontalAlignment="Center" FontSize="12" Foreground="#64748B"/>
-                            <TextBlock Name="ProgressDetailsText" Text="" 
-                                     HorizontalAlignment="Center" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0"/>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Name="ProgressStatusText" Text="Initializing scanner..." 
+                                         Grid.Column="0" FontSize="13" FontWeight="SemiBold" Foreground="#1E293B"/>
+                                <TextBlock Name="ProgressPercentageText" Text="0%" 
+                                         Grid.Column="1" FontSize="12" Foreground="#64748B"/>
+                            </Grid>
+                            
+                            <ProgressBar Name="ScanProgressBar" Height="8" Maximum="100" Value="0" Margin="0,0,0,8"/>
+                            
+                            <Grid Margin="0,0,0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Name="ProgressDetailsText" Text="Loading rules..." 
+                                         Grid.Column="0" FontSize="11" Foreground="#64748B"/>
+                                <TextBlock Name="ProgressTimeText" Text="" 
+                                         Grid.Column="1" FontSize="11" Foreground="#94A3B8"/>
+                            </Grid>
+                            
+                            <TextBlock Name="CurrentRuleText" Text="" 
+                                     FontSize="10" Foreground="#94A3B8" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                         
                         <!-- Scan Results Summary (shown after scan) -->
