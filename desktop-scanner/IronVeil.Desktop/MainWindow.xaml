@@ -213,7 +213,7 @@
                             
                             <Button Grid.Column="2" Name="LoginButton" Content="Login" 
                                     Style="{StaticResource PrimaryButton}" 
-                                    Width="100"
+                                    Width="120" Height="35" FontSize="14" FontWeight="SemiBold"
                                     Click="LoginButton_Click"/>
                         </Grid>
                         
@@ -234,7 +234,8 @@
                             
                             <Button Grid.Column="2" Name="ConnectEntraIDButton" Content="Connect" 
                                     Style="{StaticResource SecondaryButton}" 
-                                    Width="100"
+                                    Width="120" Height="35" FontSize="14" FontWeight="SemiBold"
+                                    Padding="10,5"
                                     Click="ConnectEntraIDButton_Click"/>
                         </Grid>
                     </StackPanel>

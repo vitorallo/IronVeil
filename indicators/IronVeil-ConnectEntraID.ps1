@@ -68,7 +68,8 @@ function Get-IronVeilRequiredPermissions {
         Write-Host "  • $_" -ForegroundColor Gray
     }
     
-    Write-Host "`nTotal: $($script:IronVeilRequiredScopes.Count) permissions" -ForegroundColor White
+    $scopeCount = if ($script:IronVeilRequiredScopes) { $script:IronVeilRequiredScopes.Count } else { 0 }
+    Write-Host "`nTotal: $scopeCount permissions" -ForegroundColor White
     Write-Host "Note: These are read-only permissions for security assessment" -ForegroundColor Green
     
     return $script:IronVeilRequiredScopes
@@ -234,16 +235,10 @@ function Connect-IronVeilEntraID {
         Write-Host "  Tenant: $($currentContext.TenantId)" -ForegroundColor Gray
         Write-Host "  Account: $($currentContext.Account)" -ForegroundColor Gray
         
-        $reconnect = Read-Host "`nDo you want to reconnect with IronVeil permissions? (Y/N)"
-        
-        if ($reconnect -ne 'Y' -and $reconnect -ne 'y') {
-            Write-Host "Using existing connection" -ForegroundColor Yellow
-            Write-Host "Note: Some rules may fail if permissions are insufficient" -ForegroundColor Yellow
-            return $currentContext
-        }
-        
-        Write-Host "Disconnecting current session..." -ForegroundColor Yellow
+        # Always force reconnect for IronVeil to ensure fresh authentication
+        Write-Host "`nDisconnecting current session to establish fresh connection..." -ForegroundColor Yellow
         Disconnect-MgGraph -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500  # Brief pause to ensure clean disconnect
     }
     
     # Prepare connection parameters
@@ -257,11 +252,25 @@ function Connect-IronVeilEntraID {
         Write-Host "Connecting to tenant: $TenantId" -ForegroundColor Yellow
     }
     
-    # Connect to Microsoft Graph
+    # Connect to Microsoft Graph with extensive logging
     try {
         Write-Host "`nConnecting to Microsoft Graph..." -ForegroundColor Yellow
-        Write-Host "A browser window will open for authentication" -ForegroundColor Gray
+        Write-Host "Authentication method: Interactive browser-based" -ForegroundColor Gray
         Write-Host "Please sign in with an account that has Global Reader or higher privileges" -ForegroundColor Gray
+        
+        # Log connection parameters for debugging
+        Write-Host "`nDEBUG: Connection parameters:" -ForegroundColor DarkGray
+        if ($connectParams.Scopes) {
+            Write-Host "  Scopes requested: $($connectParams.Scopes.Count) permissions" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  Scopes: Using default permissions" -ForegroundColor DarkGray
+        }
+        if ($TenantId) {
+            Write-Host "  Tenant ID: $TenantId" -ForegroundColor DarkGray
+        }
+        
+        # Try browser-based authentication first (simplest approach)
+        Write-Host "`nAttempting browser-based authentication..." -ForegroundColor Yellow
         
         Connect-MgGraph @connectParams
         
@@ -273,7 +282,11 @@ function Connect-IronVeilEntraID {
             Write-Host "  Tenant ID: $($context.TenantId)" -ForegroundColor White
             Write-Host "  Account: $($context.Account)" -ForegroundColor White
             Write-Host "  Environment: $($context.Environment)" -ForegroundColor White
-            Write-Host "  Scopes: $($context.Scopes.Count) permissions granted" -ForegroundColor White
+            if ($context.Scopes) {
+                Write-Host "  Scopes: $($context.Scopes.Count) permissions granted" -ForegroundColor White
+            } else {
+                Write-Host "  Scopes: Default permissions granted" -ForegroundColor White
+            }
             
             # Get tenant details
             try {
@@ -362,9 +375,12 @@ function Test-IronVeilEntraIDConnection {
     
     # Summary
     Write-Host "`n=== Permission Summary ===" -ForegroundColor Cyan
-    Write-Host "Granted: $($availableScopes.Count)/$($script:IronVeilRequiredScopes.Count) permissions" -ForegroundColor $(if ($missingScopes.Count -eq 0) { "Green" } else { "Yellow" })
+    $availCount = if ($availableScopes) { $availableScopes.Count } else { 0 }
+    $reqCount = if ($script:IronVeilRequiredScopes) { $script:IronVeilRequiredScopes.Count } else { 0 }
+    $missCount = if ($missingScopes) { $missingScopes.Count } else { 0 }
+    Write-Host "Granted: $availCount/$reqCount permissions" -ForegroundColor $(if ($missCount -eq 0) { "Green" } else { "Yellow" })
     
-    if ($missingScopes.Count -gt 0) {
+    if ($missingScopes -and $missingScopes.Count -gt 0) {
         Write-Host "`n⚠️  Missing permissions may cause some rules to fail" -ForegroundColor Yellow
         Write-Host "Run Connect-IronVeilEntraID to reconnect with all permissions" -ForegroundColor Yellow
         return $false

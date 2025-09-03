@@ -35,7 +35,7 @@ public partial class MainWindow : Window
     private readonly IPowerShellExecutor _powerShellExecutor;
     private readonly IConfigurationService _configurationService;
     private readonly ISystemRequirementsService _systemRequirementsService;
-    private readonly IEntraIDAuthenticationManager _entraIdAuthManager;
+    private IEntraIDAuthenticationManager? _entraIdAuthManager;
     private readonly IRuleManifestService _ruleManifestService;
     private readonly ILogger<MainWindow>? _logger;
     
@@ -64,8 +64,8 @@ public partial class MainWindow : Window
             _systemRequirementsService = ServiceProvider.GetRequiredService<ISystemRequirementsService>();
             _logger = ServiceProvider.GetService<ILogger<MainWindow>>();
             
-            // Initialize new services
-            _entraIdAuthManager = new EntraIDAuthenticationManager(_logger as ILogger<EntraIDAuthenticationManager>);
+            // Initialize new services - delay authentication manager to avoid session log conflicts
+            _entraIdAuthManager = null; // Initialize later when needed
             _ruleManifestService = new RuleManifestService(_logger as ILogger<RuleManifestService>);
             
             Loaded += MainWindow_Loaded;
@@ -684,19 +684,48 @@ public partial class MainWindow : Window
         if (_isEntraIdAuthenticated)
         {
             // Disconnect
-            await _entraIdAuthManager.DisconnectAsync();
-            UpdateEntraIdAuthenticationStatus(false);
-            StatusBarText.Text = "Disconnected from Entra ID";
+            ConnectEntraIDButton.IsEnabled = false;
+            ConnectEntraIDButton.Content = "Disconnecting...";
+            StatusBarText.Text = "Disconnecting from Entra ID...";
+            
+            try
+            {
+                if (_entraIdAuthManager != null)
+                {
+                    await _entraIdAuthManager.DisconnectAsync();
+                    _entraIdAuthManager.Dispose();
+                    _entraIdAuthManager = null; // Force new instance on next connect
+                }
+                UpdateEntraIdAuthenticationStatus(false);
+                StatusBarText.Text = "Disconnected from Entra ID";
+                ScanEntraCheckbox.IsEnabled = false;
+                ScanEntraCheckbox.IsChecked = false;
+            }
+            finally
+            {
+                ConnectEntraIDButton.IsEnabled = true;
+                ConnectEntraIDButton.Content = "Connect";
+            }
         }
         else
         {
             // Connect
             ConnectEntraIDButton.IsEnabled = false;
-            ConnectEntraIDButton.Content = "Connecting...";
-            StatusBarText.Text = "Connecting to Entra ID...";
+            
+            // Show loading state
+            var originalContent = ConnectEntraIDButton.Content;
+            ConnectEntraIDButton.Content = "⊙ Connecting...";
+            ConnectEntraIDButton.FontFamily = new System.Windows.Media.FontFamily("Segoe UI Symbol");
+            StatusBarText.Text = "Opening browser for Entra ID authentication. Please sign in...";
             
             try
             {
+                // Initialize authentication manager if not already done
+                if (_entraIdAuthManager == null)
+                {
+                    _entraIdAuthManager = new ExternalEntraIDAuthenticationManager(_logger as ILogger<ExternalEntraIDAuthenticationManager>);
+                }
+                
                 var result = await _entraIdAuthManager.ConnectAsync();
                 
                 if (result.Success)
@@ -726,6 +755,7 @@ public partial class MainWindow : Window
             finally
             {
                 ConnectEntraIDButton.IsEnabled = true;
+                ConnectEntraIDButton.FontFamily = new System.Windows.Media.FontFamily("Segoe UI");
                 ConnectEntraIDButton.Content = _isEntraIdAuthenticated ? "Disconnect" : "Connect";
             }
         }
@@ -1365,16 +1395,30 @@ public partial class MainWindow : Window
             DomainInfoText.Text = "Active Directory scans unavailable";
         }
 
-        // Update admin status
+        // Update admin status - show both process elevation and domain admin membership
         if (_systemRequirements.IsAdministrator)
         {
             AdminStatusIndicator.Fill = new SolidColorBrush(Colors.Green);
-            AdminStatusText.Text = "Admin Rights: Elevated";
+            if (_systemRequirements.IsDomainAdmin)
+            {
+                AdminStatusText.Text = "Admin Rights: Elevated (Domain Admin)";
+            }
+            else
+            {
+                AdminStatusText.Text = "Admin Rights: Elevated";
+            }
         }
         else
         {
             AdminStatusIndicator.Fill = new SolidColorBrush(Colors.Orange);
-            AdminStatusText.Text = "Admin Rights: Standard User";
+            if (_systemRequirements.IsDomainAdmin)
+            {
+                AdminStatusText.Text = "Admin Rights: Domain Admin (Not Elevated)";
+            }
+            else
+            {
+                AdminStatusText.Text = "Admin Rights: Standard User";
+            }
         }
 
         // Update scan checkboxes based on requirements
